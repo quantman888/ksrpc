@@ -1,17 +1,32 @@
 services:
   ksrpc:
-    image: ${KSRPC_IMAGE}
-    container_name: ${KSRPC_CONTAINER_NAME:-ksrpc}
+    image: ${OCI_IMAGE_REF}
+    container_name: ${KSRPC_CONTAINER_NAME}
     restart: unless-stopped
     command: ["python", "-u", "-m", "ksrpc.run_app"]
     environment:
-      CONFIG: ${KSRPC_CONFIG_PATH:-}
+      CONFIG: ${KSRPC_CONFIG_PATH}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN}
+      KSRPC_HOST: ${KSRPC_HOST}
+      KSRPC_PORT: ${KSRPC_PORT}
+      KSRPC_PATH_HTTP: ${KSRPC_PATH_HTTP}
+      KSRPC_PATH_WS: ${KSRPC_PATH_WS}
+      KSRPC_BASIC_USER: ${KSRPC_BASIC_USER}
+      KSRPC_BASIC_PASSWORD: ${KSRPC_BASIC_PASSWORD}
+      KSRPC_BASIC_CREDENTIALS_JSON: ${KSRPC_BASIC_CREDENTIALS_JSON}
+      KSRPC_IMPORT_RULES_JSON: ${KSRPC_IMPORT_RULES_JSON}
+      KSRPC_CACHE_ENABLE: ${KSRPC_CACHE_ENABLE}
+      KSRPC_CACHE_PATH: ${KSRPC_CACHE_PATH}
+      KSRPC_CACHE_TIMEOUT_JSON: ${KSRPC_CACHE_TIMEOUT_JSON}
+    volumes:
+      - "${KSRPC_CUSTOM_CONFIG_HOST_PATH}:/etc/ksrpc/custom_config.py:ro"
+      - "${KSRPC_CACHE_HOST_PATH}:${KSRPC_CACHE_PATH}"
     ports:
-      - "${KSRPC_HOST_PORT:-8080}:8080"
+      - "${KSRPC_HOST_PORT}:${KSRPC_PORT}"
     healthcheck:
       test:
         - CMD-SHELL
-        - python -c "import socket; s=socket.create_connection(('127.0.0.1', 8080), 3); s.close()"
+        - python -c "import os,socket; p=int(os.getenv('KSRPC_PORT','8080')); s=socket.create_connection(('127.0.0.1', p), 3); s.close()"
       interval: 30s
       timeout: 5s
       retries: 3

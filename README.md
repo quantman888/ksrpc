@@ -41,25 +41,45 @@ pip install ksrpc -i https://pypi.org/simple --upgrade
 
 ## Docker 部署（docker 分支）
 
-1. 准备环境变量
+1. 准备环境变量与外部配置模板
 
 ```bash
 cp .env.example .env
 ```
 
-2. 在 `.env` 中设置镜像
+2. 编辑 `.env`（重点参数）
 
 ```bash
-KSRPC_IMAGE=你的Nexus地址/命名空间/ksrpc:latest
+OCI_IMAGE_REF=你的镜像地址/ksrpc:tag
+TUSHARE_TOKEN=你的tushare_token
+KSRPC_BASIC_USER=admin
+KSRPC_BASIC_PASSWORD=强密码
 ```
 
-3. 启动
+3. 需要多账号时可选配置
 
 ```bash
-docker compose up -d
+# 示例：覆盖单账号模式（留空 KSRPC_BASIC_USER/KSRPC_BASIC_PASSWORD）
+KSRPC_BASIC_CREDENTIALS_JSON={"admin":"xxx","viewer":"yyy"}
 ```
 
-4. 查看状态
+4. 按需调整文件缓存
+
+```bash
+KSRPC_CACHE_ENABLE=true
+KSRPC_CACHE_HOST_PATH=./data/cache
+KSRPC_CACHE_PATH=/opt/ksrpc/cache
+KSRPC_CACHE_TIMEOUT_JSON={"ksrpc.server.tushare.daily":30,"ksrpc.server.tushare.*":60,"*":600}
+```
+
+5. 启动或重建
+
+```bash
+docker compose pull
+docker compose up -d --remove-orphans
+```
+
+6. 查看状态
 
 ```bash
 docker compose ps
@@ -68,9 +88,10 @@ docker compose logs -f --tail=100
 
 说明：
 
-- `docker-compose.yml` 通过 `restart: unless-stopped` 做容器级守护。
-- 默认守护主进程 `python -u -m ksrpc.run_app`。
-- `KSRPC_CONFIG_PATH` 为空时使用包内默认配置，可按需指向自定义配置模块路径。
+- `docker-compose.yml` 通过 `restart: unless-stopped` 做容器级守护，默认进程 `python -u -m ksrpc.run_app`。
+- `CONFIG` 默认指向容器内 `/etc/ksrpc/custom_config.py`，由 `./deploy/custom_config.py` 挂载注入。
+- 此方案不改 `ksrpc` 核心源码，认证/导入规则/缓存参数都通过 `.env` + 外部 `custom_config.py` 控制。
+- 端口映射默认 `${KSRPC_HOST_PORT}:${KSRPC_PORT}`，例如 `19991:8080`。
 
 ## 使用
 
