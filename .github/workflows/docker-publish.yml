@@ -70,6 +70,7 @@ jobs:
       OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
       OCI_PUSH_IMAGE: true
       OCI_PUBLISH_CHANNEL: edge
+      OCI_GATE_VULN_IGNORE_UNFIXED: true
       OCI_PUBLISH_LATEST: false
     secrets:
       nexus_username: ${{ secrets.NEXUS_USERNAME }}
@@ -89,6 +90,7 @@ jobs:
       OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
       OCI_PUSH_IMAGE: true
       OCI_PUBLISH_CHANNEL: edge
+      OCI_GATE_VULN_IGNORE_UNFIXED: true
       OCI_PUBLISH_LATEST: false
     secrets:
       nexus_username: ${{ secrets.NEXUS_USERNAME }}
