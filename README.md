@@ -72,6 +72,44 @@ docker compose logs -f --tail=100
 - 默认守护主进程 `python -u -m ksrpc.run_app`。
 - `KSRPC_CONFIG_PATH` 为空时使用包内默认配置，可按需指向自定义配置模块路径。
 
+## 分支与自动同步策略
+
+当前仓库采用三分支治理：
+
+1. `main`：纯镜像分支，仅用于和上游 `wukan1986/ksrpc:main` 对齐。
+2. `docker`：自定义开发分支，用于 Docker/部署/私有 CI 改动。
+3. `ops/sync`：自动化分支，承载 GitHub Actions，并建议设为默认分支。
+
+对应工作流：
+
+- `.github/workflows/sync-upstream.yml`：每天同步上游 `main` 到本仓库 `main`。
+- `.github/workflows/release-pypi.yml`：Release 触发 PyPI 发布。
+
+### 为什么同步工作流放在 `ops/sync`
+
+- GitHub `schedule` 事件只读取默认分支上的 workflow 文件。
+- `main` 需要保持与上游一致，不能混入自定义 workflow 改动。
+- 因此将自动化放在 `ops/sync`，并把默认分支切到 `ops/sync`。
+
+### Public fork 的 60 天停用坑（已提供落地方案）
+
+Public fork 可能因长期无活动导致定时 workflow 自动停用。仓库已提供外部看门狗脚本：
+
+- `ops/sync-workflow-watchdog.sh`
+
+该脚本会执行两件事：
+
+1. 调用 GitHub API 启用 `sync-upstream.yml`
+2. 立即触发一次 `workflow_dispatch`
+
+示例：
+
+```bash
+GITHUB_TOKEN=你的PAT ./ops/sync-workflow-watchdog.sh quantman888/ksrpc ops/sync
+```
+
+建议在你自己的服务器或另一个稳定仓库的定时任务里每天运行一次。`GITHUB_TOKEN` 需具备 `repo` 与 `workflow` 权限。
+
 ## 使用
 
 1. 服务端

@@ -1,14 +1,101 @@
-name: Sync Upstream
+name: Sync Upstream Main
 
 on:
   schedule:
-    - cron: "0 22 * * *"
+    - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Target branch in this repository"
+        required: false
+        default: "main"
+        type: string
+      upstream_repo:
+        description: "Upstream repository in owner/name format"
+        required: false
+        default: "wukan1986/ksrpc"
+        type: string
+      upstream_branch:
+        description: "Upstream branch"
+        required: false
+        default: "main"
+        type: string
+      force:
+        description: "Force reset target branch to upstream branch"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: true
 
 jobs:
   sync:
-    uses: ./.github/workflows/fork-sync.reusable.yml
-    with:
-      target_branch: main
-      upstream_repo: wukan1986/ksrpc
-      upstream_branch: main
+    if: ${{ github.ref_name == 'ops/sync' }}
+    runs-on: ubuntu-latest
+    env:
+      TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
+      UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'wukan1986/ksrpc' }}
+      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'main' }}
+      FORCE_RESET: ${{ github.event.inputs.force || 'false' }}
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure upstream remote
+        run: |
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
+          else
+            git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          fi
+
+      - name: Fetch upstream branch
+        run: git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Sync and push
+        run: |
+          set -euo pipefail
+
+          local_sha="$(git rev-parse HEAD)"
+          upstream_sha="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
+
+          {
+            echo "### Sync result"
+            echo "- target: ${TARGET_BRANCH}"
+            echo "- upstream: ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}"
+            echo "- local_sha: ${local_sha}"
+            echo "- upstream_sha: ${upstream_sha}"
+            echo "- force: ${FORCE_RESET}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${FORCE_RESET}" = "true" ]; then
+            git reset --hard "upstream/${UPSTREAM_BRANCH}"
+            git push --force-with-lease origin "HEAD:${TARGET_BRANCH}"
+            echo "- action: force-reset" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          if [ "${local_sha}" = "${upstream_sha}" ]; then
+            echo "- action: skip-already-up-to-date" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          git merge --ff-only "upstream/${UPSTREAM_BRANCH}"
+          git push origin "HEAD:${TARGET_BRANCH}"
+          echo "- action: fast-forward" >> "${GITHUB_STEP_SUMMARY}"
