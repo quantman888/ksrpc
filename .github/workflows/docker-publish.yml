@@ -44,7 +44,7 @@ jobs:
     name: Docker Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
     needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@d42ed64b33a1f5675adf88f61ddc3255be00d5d2
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@3ccfc2924aef8a556e920c87af4baee2fc340473
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -60,7 +60,7 @@ jobs:
     name: Docker Publish / Docker Edge
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/docker' }}
     needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@d42ed64b33a1f5675adf88f61ddc3255be00d5d2
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@3ccfc2924aef8a556e920c87af4baee2fc340473
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -79,7 +79,7 @@ jobs:
     name: Docker Publish / Manual Edge
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@d42ed64b33a1f5675adf88f61ddc3255be00d5d2
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@3ccfc2924aef8a556e920c87af4baee2fc340473
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
