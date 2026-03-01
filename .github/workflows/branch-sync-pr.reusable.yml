@@ -93,20 +93,55 @@ jobs:
             existing_pr_url="$(gh pr list \
               --state open \
               --base "${target_branch}" \
-              --head "${repo_owner}:${source_branch}" \
+              --head "${source_branch}" \
               --json url \
               --jq '.[0].url // ""')"
+
+            if [[ -z "${existing_pr_url}" ]]; then
+              existing_pr_url="$(gh pr list \
+                --state open \
+                --base "${target_branch}" \
+                --head "${repo_owner}:${source_branch}" \
+                --json url \
+                --jq '.[0].url // ""')"
+            fi
 
             if [[ -n "${existing_pr_url}" ]]; then
               pr_exists="true"
               pr_url="${existing_pr_url}"
             else
-              pr_url="$(gh pr create \
+              set +e
+              pr_create_output="$(gh pr create \
                 --base "${target_branch}" \
                 --head "${repo_owner}:${source_branch}" \
                 --title "${pr_title}" \
-                --body "${pr_body}")"
-              pr_created="true"
+                --body "${pr_body}" 2>&1)"
+              pr_create_code=$?
+              set -e
+
+              if [[ ${pr_create_code} -eq 0 ]]; then
+                pr_url="${pr_create_output}"
+                pr_created="true"
+              else
+                # Make workflow idempotent: if PR already exists, reuse it instead of failing.
+                if echo "${pr_create_output}" | grep -qi "already exists"; then
+                  existing_pr_url="$(gh pr list \
+                    --state open \
+                    --base "${target_branch}" \
+                    --json url,headRefName \
+                    --jq "[.[] | select(.headRefName == \"${source_branch}\")][0].url // \"\"")"
+                  if [[ -n "${existing_pr_url}" ]]; then
+                    pr_exists="true"
+                    pr_url="${existing_pr_url}"
+                  else
+                    echo "${pr_create_output}"
+                    exit 1
+                  fi
+                else
+                  echo "${pr_create_output}"
+                  exit 1
+                fi
+              fi
             fi
           fi
 
