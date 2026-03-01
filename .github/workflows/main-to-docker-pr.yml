@@ -1,9 +1,9 @@
-name: Open PR from main to docker
+name: Branch Sync / Main to Docker PR
 
 on:
   workflow_run:
     workflows:
-      - Sync Upstream Main
+      - Sync Upstream / Main
     types:
       - completed
   schedule:
@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   open_pr:
+    name: Branch Sync / Open PR
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     uses: ./.github/workflows/branch-sync-pr.reusable.yml
     with:

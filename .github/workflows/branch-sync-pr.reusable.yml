@@ -1,4 +1,4 @@
-name: Branch Sync PR Reusable
+name: Branch Sync PR / Reusable
 
 on:
   workflow_call:
@@ -43,6 +43,7 @@ permissions:
 
 jobs:
   open_branch_pr:
+    name: Branch Sync PR / Open or Reuse
     runs-on: ubuntu-latest
     defaults:
       run:

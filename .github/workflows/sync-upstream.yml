@@ -1,4 +1,4 @@
-name: Sync Upstream Main
+name: Sync Upstream / Main
 
 on:
   schedule:
@@ -38,6 +38,7 @@ concurrency:
 
 jobs:
   sync:
+    name: Sync Upstream / Fast Forward
     if: ${{ github.ref_name == 'ops/sync' }}
     runs-on: ubuntu-latest
     env:

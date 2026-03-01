@@ -47,16 +47,17 @@ pip install ksrpc -i https://pypi.org/simple --upgrade
 cp .env.example .env
 ```
 
-2. 在 `.env` 中设置镜像
+2. 在 `.env` 中设置镜像（digest-only）
 
 ```bash
-KSRPC_IMAGE=你的Nexus地址/命名空间/ksrpc:latest
+OCI_IMAGE_REF=你的Nexus地址/命名空间/ksrpc@sha256:你的镜像摘要
 ```
 
 3. 启动
 
 ```bash
-docker compose up -d
+docker compose pull ksrpc
+docker compose up -d ksrpc
 ```
 
 4. 查看状态
@@ -71,6 +72,8 @@ docker compose logs -f --tail=100
 - `docker-compose.yml` 通过 `restart: unless-stopped` 做容器级守护。
 - 默认守护主进程 `python -u -m ksrpc.run_app`。
 - `KSRPC_CONFIG_PATH` 为空时使用包内默认配置，可按需指向自定义配置模块路径。
+- 容器健康检查使用 `127.0.0.1:8080` 的 TCP 连通性，不依赖业务接口路径与认证，适合中环测试最小探活。
+- 服务默认业务路径为 `/api/v1/{time}`（`{time}` 为动态时间片且受认证中间件约束），不建议直接作为固定健康检查 URL。
 
 ## 分支与自动同步策略
 

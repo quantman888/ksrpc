@@ -1,6 +1,6 @@
 services:
   ksrpc:
-    image: ${KSRPC_IMAGE}
+    image: ${OCI_IMAGE_REF:?OCI_IMAGE_REF must be a digest reference like registry/namespace/ksrpc@sha256:...}
     container_name: ${KSRPC_CONTAINER_NAME:-ksrpc}
     restart: unless-stopped
     command: ["python", "-u", "-m", "ksrpc.run_app"]
