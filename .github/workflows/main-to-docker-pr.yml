@@ -1,0 +1,33 @@
+name: Open PR from main to docker
+
+on:
+  workflow_run:
+    workflows:
+      - Sync Upstream Main
+    types:
+      - completed
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: main-to-docker-pr
+  cancel-in-progress: true
+
+jobs:
+  open_pr:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    uses: quantman888/workflow-reusable/.github/workflows/branch-sync-pr.reusable.yml@main
+    with:
+      source_branch: main
+      target_branch: docker
+      pr_title: "chore(sync): merge main into docker"
+      pr_body: |
+        Auto-generated PR from branch sync workflow.
+        - source: main
+        - target: docker
+        - purpose: keep docker branch up to date with latest upstream-synced main
