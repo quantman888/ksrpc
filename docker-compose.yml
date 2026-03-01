@@ -2,7 +2,7 @@ services:
   ksrpc:
     image: ${OCI_IMAGE_REF}
     container_name: ${KSRPC_CONTAINER_NAME}
-    restart: always
+    restart: always # managed as deployment template default
     command: ["python", "-u", "-m", "ksrpc.run_app"]
     environment:
       CONFIG: ${KSRPC_CONFIG_PATH}
