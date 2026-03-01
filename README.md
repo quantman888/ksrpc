@@ -67,8 +67,6 @@ KSRPC_BASIC_CREDENTIALS_JSON={"admin":"xxx","viewer":"yyy"}
 
 ```bash
 KSRPC_CACHE_ENABLE=true
-KSRPC_CACHE_HOST_PATH=./data/cache
-KSRPC_CACHE_PATH=/opt/ksrpc/cache
 KSRPC_CACHE_TIMEOUT_JSON={"ksrpc.server.tushare.daily":30,"ksrpc.server.tushare.*":60,"*":600}
 ```
 
@@ -89,7 +87,9 @@ docker compose logs -f --tail=100
 说明：
 
 - `docker-compose.yml` 通过 `restart: unless-stopped` 做容器级守护，默认进程 `python -u -m ksrpc.run_app`。
-- `CONFIG` 默认指向容器内 `/etc/ksrpc/custom_config.py`，由 `./deploy/custom_config.py` 挂载注入。
+- `CONFIG` 默认指向容器内 `/etc/ksrpc/custom_config.py`，挂载路径固定为 `./deploy/custom_config.py:/etc/ksrpc/custom_config.py:ro`。
+- 缓存目录挂载路径固定为 `./data/cache:/opt/ksrpc/cache`。
+- 固定路径不再通过 `.env` 变量配置：`KSRPC_CUSTOM_CONFIG_HOST_PATH`、`KSRPC_CACHE_HOST_PATH`、`KSRPC_CACHE_PATH`。
 - 此方案不改 `ksrpc` 核心源码，认证/导入规则/缓存参数都通过 `.env` + 外部 `custom_config.py` 控制。
 - 端口映射默认 `${KSRPC_HOST_PORT}:${KSRPC_PORT}`，例如 `19991:8080`。
 

@@ -2,7 +2,7 @@ services:
   ksrpc:
     image: ${OCI_IMAGE_REF}
     container_name: ${KSRPC_CONTAINER_NAME}
-    restart: unless-stopped
+    restart: always
     command: ["python", "-u", "-m", "ksrpc.run_app"]
     environment:
       CONFIG: ${KSRPC_CONFIG_PATH}
@@ -16,11 +16,11 @@ services:
       KSRPC_BASIC_CREDENTIALS_JSON: ${KSRPC_BASIC_CREDENTIALS_JSON}
       KSRPC_IMPORT_RULES_JSON: ${KSRPC_IMPORT_RULES_JSON}
       KSRPC_CACHE_ENABLE: ${KSRPC_CACHE_ENABLE}
-      KSRPC_CACHE_PATH: ${KSRPC_CACHE_PATH}
+      KSRPC_CACHE_PATH: /opt/ksrpc/cache
       KSRPC_CACHE_TIMEOUT_JSON: ${KSRPC_CACHE_TIMEOUT_JSON}
     volumes:
-      - "${KSRPC_CUSTOM_CONFIG_HOST_PATH}:/etc/ksrpc/custom_config.py:ro"
-      - "${KSRPC_CACHE_HOST_PATH}:${KSRPC_CACHE_PATH}"
+      - "./deploy/custom_config.py:/etc/ksrpc/custom_config.py:ro"
+      - "./data/cache:/opt/ksrpc/cache"
     ports:
       - "${KSRPC_HOST_PORT}:${KSRPC_PORT}"
     healthcheck:
