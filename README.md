@@ -68,7 +68,7 @@ docker compose logs -f --tail=100
 
 说明：
 
-- `docker-compose.yml` 通过 `restart: unless-stopped` + `init: true` 做容器级守护。
+- `docker-compose.yml` 通过 `restart: unless-stopped` 做容器级守护。
 - 默认守护主进程 `python -u -m ksrpc.run_app`。
 - `KSRPC_CONFIG_PATH` 为空时使用包内默认配置，可按需指向自定义配置模块路径。
 

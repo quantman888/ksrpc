@@ -2,7 +2,6 @@ services:
   ksrpc:
     image: ${KSRPC_IMAGE}
     container_name: ${KSRPC_CONTAINER_NAME:-ksrpc}
-    init: true
     restart: unless-stopped
     command: ["python", "-u", "-m", "ksrpc.run_app"]
     environment:
