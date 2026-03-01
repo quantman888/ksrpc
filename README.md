@@ -84,6 +84,7 @@ docker compose logs -f --tail=100
 
 - `.github/workflows/sync-upstream.yml`：每天同步上游 `main` 到本仓库 `main`。
 - `.github/workflows/main-to-docker-pr.yml`：在 `main` 更新后自动创建 `main -> docker` 的同步 PR。
+- `.github/workflows/branch-sync-pr.reusable.yml`：`main-to-docker-pr` 使用的本仓库可复用工作流。
 - `.github/workflows/release-pypi.yml`：Release 触发 PyPI 发布。
 
 ### 为什么同步工作流放在 `ops/sync`
