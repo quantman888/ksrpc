@@ -21,7 +21,7 @@ concurrency:
 jobs:
   open_pr:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    uses: quantman888/workflow-reusable/.github/workflows/branch-sync-pr.reusable.yml@main
+    uses: ./.github/workflows/branch-sync-pr.reusable.yml
     with:
       source_branch: main
       target_branch: docker
