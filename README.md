@@ -39,6 +39,39 @@ pip install ksrpc -i https://mirrors.aliyun.com/pypi/simple --upgrade
 pip install ksrpc -i https://pypi.org/simple --upgrade
 ```
 
+## Docker 部署（docker 分支）
+
+1. 准备环境变量
+
+```bash
+cp .env.example .env
+```
+
+2. 在 `.env` 中设置镜像
+
+```bash
+KSRPC_IMAGE=你的Nexus地址/命名空间/ksrpc:latest
+```
+
+3. 启动
+
+```bash
+docker compose up -d
+```
+
+4. 查看状态
+
+```bash
+docker compose ps
+docker compose logs -f --tail=100
+```
+
+说明：
+
+- `docker-compose.yml` 通过 `restart: unless-stopped` + `init: true` 做容器级守护。
+- 默认守护主进程 `python -u -m ksrpc.run_app`。
+- `KSRPC_CONFIG_PATH` 为空时使用包内默认配置，可按需指向自定义配置模块路径。
+
 ## 使用
 
 1. 服务端
