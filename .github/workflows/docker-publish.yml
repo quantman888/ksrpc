@@ -3,8 +3,30 @@ name: Docker Publish
 on:
   pull_request:
     branches: [docker]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "setup.py"
+      - "ksrpc/**"
+      - "deploy/**"
+      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/docker-publish.reusable.yml"
+      - ".github/workflows/ci-check.yml"
   push:
     branches: [docker]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "setup.py"
+      - "ksrpc/**"
+      - "deploy/**"
+      - ".github/workflows/docker-publish.yml"
+      - ".github/workflows/docker-publish.reusable.yml"
+      - ".github/workflows/ci-check.yml"
   workflow_dispatch:
 
 concurrency:
@@ -15,40 +37,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Docker Publish / Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.x"
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest
-      - name: Run tests
-        shell: bash
-        run: |
-          set +e
-          python -m pytest -q tests
-          rc=$?
-          set -e
-
-          if [ "${rc}" -eq 0 ]; then
-            echo "pytest passed."
-          elif [ "${rc}" -eq 5 ]; then
-            echo "pytest exit code 5 (no tests collected), treated as success."
-          else
-            echo "pytest failed with exit code ${rc}."
-            exit "${rc}"
-          fi
-
   publish_pr:
     name: Docker Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
-    needs: [test]
     uses: ./.github/workflows/docker-publish.reusable.yml
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
@@ -64,7 +55,6 @@ jobs:
   publish_edge:
     name: Docker Publish / Edge
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/docker') }}
-    needs: [test]
     uses: ./.github/workflows/docker-publish.reusable.yml
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
