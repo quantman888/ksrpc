@@ -1,7 +1,5 @@
-import asyncio
 import builtins
 import fnmatch
-from functools import partial
 import hashlib
 import inspect
 import pathlib
@@ -29,12 +27,6 @@ logger.remove()
 logger.add(sys.stderr,
            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level:<8}</level> | PID:{process.id} | TID:{thread.id} | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
            level="INFO", colorize=True)
-
-
-async def call_sync_in_executor(func, *args, **kwargs):
-    """Run blocking callables in thread pool to avoid blocking event loop."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 
 
 async def get_property(obj, ref_id):
@@ -141,7 +133,7 @@ async def get_calls(module, calls, ref_id):
                 if inspect.iscoroutinefunction(out):
                     out = await out(*args, **kwargs)
                 else:
-                    out = await call_sync_in_executor(out, *args, **kwargs)
+                    out = out(*args, **kwargs)
         else:
             # 获取的是属性，可直接返回
             pass
