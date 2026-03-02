@@ -170,15 +170,21 @@ async def async_call(module, calls, ref_id):
     try:
         if CACHE_ENABLE:
             # 缓存ID与超时
-            path = CACHE / generate_key(module, calls)
+            cache_key = generate_key(module, calls)
             cache_timeout = chian_timeout(call_chian(module, calls), CACHE_TIMEOUT)
+            path = CACHE / cache_key
 
-            if path.exists() and time.time() - path.stat().st_mtime < cache_timeout:
-                logger.info(f'load {module}:{calls}'[:300])
+            if path.exists():
+                diff = time.time() - path.stat().st_mtime
+            else:
+                diff = cache_timeout
+
+            if diff < cache_timeout:
+                logger.info(f'load {cache_timeout}/{diff :.0f} {cache_key} {module}:{calls}'[:300])
                 with path.open("rb") as f:
                     output = pickle.load(f)
             else:
-                logger.info(f'dump {module}:{calls}'[:300])
+                logger.info(f'dump {cache_timeout} {cache_key} {module}:{calls}'[:300])
                 output = await get_calls(module, calls, ref_id)
                 with path.open("wb") as f:
                     pickle.dump(output, f)
