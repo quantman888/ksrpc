@@ -7,6 +7,10 @@ on:
     branches: [docker]
   workflow_dispatch:
 
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -14,11 +18,12 @@ jobs:
   test:
     name: Docker Publish / Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.x"
       - name: Install dependencies
@@ -56,30 +61,9 @@ jobs:
       OCI_PUBLISH_CHANNEL: none
       OCI_PUBLISH_LATEST: false
 
-  publish_push_docker:
-    name: Docker Publish / Docker Edge
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/docker' }}
-    needs: [test]
-    uses: ./.github/workflows/docker-publish.reusable.yml
-    with:
-      OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
-      OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
-      OCI_PUSH_IMAGE: true
-      OCI_PUBLISH_CHANNEL: edge
-      OCI_GATE_VULN_SEVERITY: CRITICAL
-      OCI_GATE_VULN_IGNORE_UNFIXED: true
-      OCI_PUBLISH_LATEST: false
-    secrets:
-      nexus_username: ${{ secrets.NEXUS_USERNAME }}
-      nexus_password: ${{ secrets.NEXUS_PASSWORD }}
-
-  publish_workflow_dispatch:
-    name: Docker Publish / Manual Edge
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+  publish_edge:
+    name: Docker Publish / Edge
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/docker') }}
     needs: [test]
     uses: ./.github/workflows/docker-publish.reusable.yml
     with:
@@ -101,21 +85,22 @@ jobs:
   publish_summary:
     name: Docker Publish / Summary
     if: ${{ always() && !cancelled() }}
-    needs: [publish_pr, publish_push_docker, publish_workflow_dispatch]
+    needs: [publish_pr, publish_edge]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_pr.outputs.image_with_digest || needs.publish_push_docker.outputs.image_with_digest || needs.publish_workflow_dispatch.outputs.image_with_digest }}
-      OCI_IMAGE_REF: ${{ needs.publish_pr.outputs.image_ref || needs.publish_push_docker.outputs.image_ref || needs.publish_workflow_dispatch.outputs.image_ref }}
-      OCI_IMAGE_TAGS: ${{ needs.publish_pr.outputs.image_tags || needs.publish_push_docker.outputs.image_tags || needs.publish_workflow_dispatch.outputs.image_tags }}
-      OCI_DIGEST: ${{ needs.publish_pr.outputs.digest || needs.publish_push_docker.outputs.digest || needs.publish_workflow_dispatch.outputs.digest }}
+      OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}
+      OCI_IMAGE_REF: ${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}
+      OCI_IMAGE_TAGS: ${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}
+      OCI_DIGEST: ${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}
     steps:
       - name: Resolve summary outputs
         id: summary
         run: |
-          OCI_IMAGE_WITH_DIGEST="${{ needs.publish_pr.outputs.image_with_digest || needs.publish_push_docker.outputs.image_with_digest || needs.publish_workflow_dispatch.outputs.image_with_digest }}"
-          OCI_IMAGE_REF="${{ needs.publish_pr.outputs.image_ref || needs.publish_push_docker.outputs.image_ref || needs.publish_workflow_dispatch.outputs.image_ref }}"
-          OCI_IMAGE_TAGS="${{ needs.publish_pr.outputs.image_tags || needs.publish_push_docker.outputs.image_tags || needs.publish_workflow_dispatch.outputs.image_tags }}"
-          OCI_DIGEST="${{ needs.publish_pr.outputs.digest || needs.publish_push_docker.outputs.digest || needs.publish_workflow_dispatch.outputs.digest }}"
+          OCI_IMAGE_WITH_DIGEST="${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}"
+          OCI_IMAGE_REF="${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}"
+          OCI_IMAGE_TAGS="${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}"
+          OCI_DIGEST="${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}"
 
           {
             echo "OCI_IMAGE_WITH_DIGEST=${OCI_IMAGE_WITH_DIGEST}"
