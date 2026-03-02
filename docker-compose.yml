@@ -3,7 +3,7 @@ services:
     image: ${OCI_IMAGE_REF}
     container_name: ${KSRPC_CONTAINER_NAME}
     restart: always # managed as deployment template default
-    command: ["python", "-u", "-m", "ksrpc.run_app"]
+    command: ["python", "-u", "-m", "gunicorn", "ksrpc.run_gunicorn:web_app", "--bind", "0.0.0.0:8080", "--worker-class", "aiohttp.GunicornWebWorker", "--workers", "1", "--timeout", "300", "--graceful-timeout", "30", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info"]
     environment:
       CONFIG: ${KSRPC_CONFIG_PATH}
       TUSHARE_TOKEN: ${TUSHARE_TOKEN}

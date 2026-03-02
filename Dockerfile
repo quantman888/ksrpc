@@ -17,4 +17,4 @@ RUN pip install --no-cache-dir .
 EXPOSE 8080
 
 ENTRYPOINT ["tini", "--"]
-CMD ["python", "-u", "-m", "ksrpc.run_app"]
+CMD ["python", "-u", "-m", "gunicorn", "ksrpc.run_gunicorn:web_app", "--bind", "0.0.0.0:8080", "--worker-class", "aiohttp.GunicornWebWorker", "--workers", "1", "--timeout", "300", "--graceful-timeout", "30", "--keep-alive", "5", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info"]
