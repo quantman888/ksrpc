@@ -5,18 +5,34 @@ TuShare服务转发
 
 """
 import os
+import threading
 
 import tushare as ts
 
-# set TUSHARE_TOKEN=1127b8c5f1d3b468f9d3012ed72& python -m ksrpc.run_app
-pro = ts.pro_api(token=os.getenv("TUSHARE_TOKEN", ""), timeout=30)
+_TOKEN = os.getenv("TUSHARE_TOKEN", "")
+_TIMEOUT = 30
+_LOCAL = threading.local()
 
 __path__ = []
 __all__ = []
 
 
+def _get_pro():
+    # 每个工作线程维护独立的 Tushare client，避免并发下共享 client 争用
+    if not hasattr(_LOCAL, "pro"):
+        _LOCAL.pro = ts.pro_api(token=_TOKEN, timeout=_TIMEOUT)
+    return _LOCAL.pro
+
+
 def __getattr__(name):
-    return pro.__getattr__(name)
+    attr = getattr(_get_pro(), name)
+    if not callable(attr):
+        return attr
+
+    def _dispatch(*args, **kwargs):
+        return getattr(_get_pro(), name)(*args, **kwargs)
+
+    return _dispatch
 
 
 def set_token(token):
