@@ -19,8 +19,7 @@ services:
       KSRPC_CACHE_PATH: /opt/ksrpc/cache
       KSRPC_CACHE_TIMEOUT_JSON: ${KSRPC_CACHE_TIMEOUT_JSON}
     volumes:
-      - "./deploy/custom_config.py:/etc/ksrpc/custom_config.py:ro"
-      - "./data/cache:/opt/ksrpc/cache"
+      - "${KSRPC_CACHE_HOST_PATH:-./data/cache}:/opt/ksrpc/cache"
     ports:
       - "${KSRPC_HOST_PORT}:${KSRPC_PORT}"
     healthcheck:
