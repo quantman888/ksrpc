@@ -86,11 +86,11 @@ docker compose logs -f --tail=100
 
 说明：
 
-- `docker-compose.yml` 通过 `restart: always` 做容器级守护，默认进程 `python -u -m ksrpc.run_app`。
-- `CONFIG` 默认指向容器内 `/etc/ksrpc/custom_config.py`，挂载路径固定为 `./deploy/custom_config.py:/etc/ksrpc/custom_config.py:ro`。
-- 缓存目录挂载路径固定为 `./data/cache:/opt/ksrpc/cache`。
-- 固定路径不再通过 `.env` 变量配置：`KSRPC_CUSTOM_CONFIG_HOST_PATH`、`KSRPC_CACHE_HOST_PATH`、`KSRPC_CACHE_PATH`。
-- 此方案不改 `ksrpc` 核心源码，认证/导入规则/缓存参数都通过 `.env` + 外部 `custom_config.py` 控制。
+- `docker-compose.yml` 通过 `restart: always` 做容器级守护，`command` 固定为 `python -u -m gunicorn -c /etc/ksrpc/gunicorn.conf.py ksrpc.run_gunicorn:web_app`。
+- Gunicorn 配置目录通过 `.env` 中 `KSRPC_GUNICORN_CONFIG_HOST_DIR` 挂载到容器 `/etc/ksrpc`（默认值 `.`）。
+- 默认值 `.` 指向当前项目目录，因此默认读取宿主机 `./gunicorn.conf.py`（容器内固定路径 `/etc/ksrpc/gunicorn.conf.py`）。
+- `CONFIG` 默认 `/app/deploy/custom_config.py`，继续用于业务侧认证、导入规则、缓存配置。
+- 缓存目录默认挂载为 `${KSRPC_CACHE_HOST_PATH:-./data/cache}:/opt/ksrpc/cache`。
 - 端口映射默认 `${KSRPC_HOST_PORT}:${KSRPC_PORT}`，例如 `19991:8080`。
 
 ## 使用
@@ -103,8 +103,15 @@ python -m ksrpc.run_app
 # 使用配置运行，注意&前不要有空格
 set CONFIG=config.py& python -m ksrpc.run_app # windows
 CONFIG=config.py python -m ksrpc.run_app # linux
-CONFIG=config.py gunicorn ksrpc.run_gunicorn:web_app --bind 0.0.0.0:8080 --worker-class aiohttp.GunicornWebWorker # linux
+# 使用 gunicorn.conf.py 集中管理 bind/workers/timeout/worker_class
+set CONFIG=config.py& gunicorn -c gunicorn.conf.py ksrpc.run_gunicorn:web_app # windows
+CONFIG=config.py gunicorn -c gunicorn.conf.py ksrpc.run_gunicorn:web_app # linux
 ```
+
+说明：
+
+- `aiohttp` 应用默认 `worker_class` 推荐 `aiohttp.GunicornWebWorker`。
+- 生产部署建议通过 `.env` 的 `KSRPC_GUNICORN_*` 变量调优 `workers`、`keepalive`、`timeout`。
 
 2. 异步客户端（推荐）
 
