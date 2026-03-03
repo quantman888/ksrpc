@@ -1,96 +1,60 @@
-name: Docker / Publish
+name: Docker Publish
 
 on:
-  pull_request:
-    branches: [docker]
-  push:
-    branches: [docker]
   workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
-  artifact-metadata: write
 
 jobs:
-  test:
-    name: Docker Publish / Test
+  guard_branch:
+    name: Docker Publish / Branch Guard
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - name: Install dependencies
+      - name: Require docker branch for manual publish
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
-      - name: Run tests
-        run: |
-          set +e
-          python -m pytest -q tests
-          test_exit_code=$?
-          set -e
-
-          if [[ "${test_exit_code}" -eq 5 ]]; then
-            echo "No tests collected under tests/, continue."
-            exit 0
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/docker" ]]; then
+            echo "::error::Manual publish is allowed only on refs/heads/docker. Current ref: ${GITHUB_REF}"
+            exit 1
           fi
-
-          exit "${test_exit_code}"
 
   publish_pr:
     name: Docker Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
-    needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@bbb2788457a0609a6126bc0b0103dc5e413666f3
+    uses: ./.github/workflows/docker-publish.reusable.yml
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH || 'Dockerfile' }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT || '.' }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS || 'linux/amd64' }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS || '' }}
+      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
+      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
+      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
+      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
       OCI_PUSH_IMAGE: false
       OCI_PUBLISH_CHANNEL: none
       OCI_PUBLISH_LATEST: false
 
-  publish_push_docker:
-    name: Docker Publish / Docker Edge
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/docker' }}
-    needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@bbb2788457a0609a6126bc0b0103dc5e413666f3
+  publish_edge:
+    name: Docker Publish / Edge
+    needs: [guard_branch]
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/docker-publish.reusable.yml
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH || 'Dockerfile' }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT || '.' }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS || 'linux/amd64' }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS || '' }}
+      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
+      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
+      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
+      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
       OCI_PUSH_IMAGE: true
       OCI_PUBLISH_CHANNEL: edge
-      OCI_PUBLISH_LATEST: false
-    secrets:
-      nexus_username: ${{ secrets.NEXUS_USERNAME }}
-      nexus_password: ${{ secrets.NEXUS_PASSWORD }}
-
-  publish_workflow_dispatch:
-    name: Docker Publish / Manual Edge
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs: [test]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@bbb2788457a0609a6126bc0b0103dc5e413666f3
-    with:
-      OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
-      OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH || 'Dockerfile' }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT || '.' }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS || 'linux/amd64' }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS || '' }}
-      OCI_PUSH_IMAGE: true
-      OCI_PUBLISH_CHANNEL: edge
+      OCI_GATE_VULN_SEVERITY: CRITICAL
+      OCI_GATE_VULN_IGNORE_UNFIXED: true
       OCI_PUBLISH_LATEST: false
     secrets:
       nexus_username: ${{ secrets.NEXUS_USERNAME }}
@@ -99,31 +63,37 @@ jobs:
   publish_summary:
     name: Docker Publish / Summary
     if: ${{ always() && !cancelled() }}
-    needs: [publish_pr, publish_push_docker, publish_workflow_dispatch]
+    needs: [publish_pr, publish_edge]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      image_with_digest: ${{ needs.publish_pr.outputs.image_with_digest || needs.publish_push_docker.outputs.image_with_digest || needs.publish_workflow_dispatch.outputs.image_with_digest }}
-      image_ref: ${{ needs.publish_pr.outputs.image_ref || needs.publish_push_docker.outputs.image_ref || needs.publish_workflow_dispatch.outputs.image_ref }}
-      digest: ${{ needs.publish_pr.outputs.digest || needs.publish_push_docker.outputs.digest || needs.publish_workflow_dispatch.outputs.digest }}
+      OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}
+      OCI_IMAGE_REF: ${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}
+      OCI_IMAGE_TAGS: ${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}
+      OCI_DIGEST: ${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}
     steps:
       - name: Resolve summary outputs
         id: summary
         run: |
-          image_with_digest="${{ needs.publish_pr.outputs.image_with_digest || needs.publish_push_docker.outputs.image_with_digest || needs.publish_workflow_dispatch.outputs.image_with_digest }}"
-          image_ref="${{ needs.publish_pr.outputs.image_ref || needs.publish_push_docker.outputs.image_ref || needs.publish_workflow_dispatch.outputs.image_ref }}"
-          digest="${{ needs.publish_pr.outputs.digest || needs.publish_push_docker.outputs.digest || needs.publish_workflow_dispatch.outputs.digest }}"
+          OCI_IMAGE_WITH_DIGEST="${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}"
+          OCI_IMAGE_REF="${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}"
+          OCI_IMAGE_TAGS="${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}"
+          OCI_DIGEST="${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}"
 
           {
-            echo "image_with_digest=${image_with_digest}"
-            echo "image_ref=${image_ref}"
-            echo "digest=${digest}"
+            echo "OCI_IMAGE_WITH_DIGEST=${OCI_IMAGE_WITH_DIGEST}"
+            echo "OCI_IMAGE_REF=${OCI_IMAGE_REF}"
+            echo "OCI_IMAGE_TAGS=${OCI_IMAGE_TAGS}"
+            echo "OCI_DIGEST=${OCI_DIGEST}"
           } >> "${GITHUB_OUTPUT}"
+
       - name: Show reusable workflow outputs
         run: |
           {
             echo "### Docker Publish Summary"
             echo ""
-            echo "- image_with_digest: \`${{ steps.summary.outputs.image_with_digest }}\`"
-            echo "- image_ref: \`${{ steps.summary.outputs.image_ref }}\`"
-            echo "- digest: \`${{ steps.summary.outputs.digest }}\`"
+            echo "- OCI_IMAGE_WITH_DIGEST: \`${{ steps.summary.outputs.OCI_IMAGE_WITH_DIGEST }}\`"
+            echo "- OCI_IMAGE_REF: \`${{ steps.summary.outputs.OCI_IMAGE_REF }}\`"
+            echo "- OCI_IMAGE_TAGS: \`${{ steps.summary.outputs.OCI_IMAGE_TAGS }}\`"
+            echo "- OCI_DIGEST: \`${{ steps.summary.outputs.OCI_DIGEST }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
