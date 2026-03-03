@@ -1,4 +1,4 @@
-name: Docker Promote
+name: Docker Release
 
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   test:
-    name: Docker Promote / Test
+    name: Docker Release / Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -57,7 +57,7 @@ jobs:
           fi
 
   promote:
-    name: Docker Promote / Promote Tags
+    name: Docker Release / Promote Tags
     runs-on: ubuntu-latest
     needs: [test]
     timeout-minutes: 30
