@@ -27,38 +27,59 @@ jobs:
   publish_pr:
     name: Docker Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
-    uses: ./.github/workflows/docker-publish.reusable.yml
-    with:
-      OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
-      OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
-      OCI_PUSH_IMAGE: false
-      OCI_PUBLISH_CHANNEL: none
-      OCI_PUBLISH_LATEST: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    outputs:
+      image_ref: ${{ steps.publish.outputs.image_ref }}
+      image_tags: ${{ steps.publish.outputs.image_tags }}
+      digest: ${{ steps.publish.outputs.digest }}
+      image_with_digest: ${{ steps.publish.outputs.image_with_digest }}
+    steps:
+      - name: Publish image
+        id: publish
+        uses: ./.github/actions/docker-publish
+        with:
+          OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
+          OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+          OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
+          OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
+          OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
+          OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
+          OCI_PUSH_IMAGE: 'false'
+          OCI_PUBLISH_CHANNEL: none
+          OCI_PUBLISH_LATEST: 'false'
+          nexus_username: ${{ secrets.NEXUS_USERNAME }}
+          nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
   publish_edge:
     name: Docker Publish / Edge
     needs: [guard_branch]
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/docker-publish.reusable.yml
-    with:
-      OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
-      OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
-      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
-      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
-      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
-      OCI_PUSH_IMAGE: true
-      OCI_PUBLISH_CHANNEL: edge
-      OCI_GATE_VULN_SEVERITY: CRITICAL
-      OCI_GATE_VULN_IGNORE_UNFIXED: true
-      OCI_PUBLISH_LATEST: false
-    secrets:
-      nexus_username: ${{ secrets.NEXUS_USERNAME }}
-      nexus_password: ${{ secrets.NEXUS_PASSWORD }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    outputs:
+      image_ref: ${{ steps.publish.outputs.image_ref }}
+      image_tags: ${{ steps.publish.outputs.image_tags }}
+      digest: ${{ steps.publish.outputs.digest }}
+      image_with_digest: ${{ steps.publish.outputs.image_with_digest }}
+    steps:
+      - name: Publish image
+        id: publish
+        uses: ./.github/actions/docker-publish
+        with:
+          OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
+          OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+          OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
+          OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
+          OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
+          OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
+          OCI_PUSH_IMAGE: 'true'
+          OCI_PUBLISH_CHANNEL: edge
+          OCI_GATE_VULN_SEVERITY: CRITICAL
+          OCI_GATE_VULN_IGNORE_UNFIXED: 'true'
+          OCI_PUBLISH_LATEST: 'false'
+          nexus_username: ${{ secrets.NEXUS_USERNAME }}
+          nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
   publish_summary:
     name: Docker Publish / Summary
