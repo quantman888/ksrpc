@@ -87,10 +87,11 @@ docker compose logs -f --tail=100
 说明：
 
 - `docker-compose.yml` 通过 `restart: always` 做容器级守护，`command` 固定为 `python -u -m gunicorn -c /etc/ksrpc/gunicorn.conf.py ksrpc.run_gunicorn:web_app`。
-- Gunicorn 配置目录通过 `.env` 中 `KSRPC_GUNICORN_CONFIG_HOST_DIR` 挂载到容器 `/etc/ksrpc`（默认值 `.`）。
-- 默认值 `.` 指向当前项目目录，因此默认读取宿主机 `./gunicorn.conf.py`（容器内固定路径 `/etc/ksrpc/gunicorn.conf.py`）。
-- `CONFIG` 默认 `/app/deploy/custom_config.py`，继续用于业务侧认证、导入规则、缓存配置。
-- 缓存目录默认挂载为 `${KSRPC_CACHE_HOST_PATH:-./data/cache}:/opt/ksrpc/cache`。
+- `docker-compose.yml` 使用 `env_file: .env` 注入环境变量，并在 compose `environment` 中固定 `CONFIG=/etc/ksrpc/ksrpc.conf.py`。
+- Gunicorn 配置文件通过 `.env` 中 `KSRPC_GUNICORN_CONFIG_PATH` 按文件路径挂载到容器 `/etc/ksrpc/gunicorn.conf.py`。
+- ksrpc 配置文件通过 `.env` 中 `KSRPC_CONFIG_PATH` 按文件路径挂载到容器 `/etc/ksrpc/ksrpc.conf.py`。
+- Docker 启动链固定通过 `CONFIG=/etc/ksrpc/ksrpc.conf.py` 加载外部配置，对应宿主机 `${KSRPC_CONFIG_PATH}`（默认 `./ksrpc.conf.py`）。
+- 缓存目录默认挂载为 `${KSRPC_CACHE_HOST_PATH:-./data/cache}:${KSRPC_CACHE_PATH:-/opt/ksrpc/cache}`。
 - 端口映射默认 `${KSRPC_HOST_PORT}:${KSRPC_PORT}`，例如 `19991:8080`。
 
 ## 使用
@@ -237,8 +238,13 @@ print(await demo1.__getattr__('__doc__')())  # 取的远程ksrpc.server.demo.__d
 ## 环境变量
 
 PRINT=0 屏蔽下载进度条(client端有效)
+CONFIG=config.py 指定外部配置文件路径（server端有效）
 
-CONFIG=config.py 指定配置文件路径（server端有效）
+Docker Compose 场景补充：
+
+- `docker-compose.yml` 在 compose `environment` 中固定 `CONFIG=/etc/ksrpc/ksrpc.conf.py`，Docker 场景不建议在 `.env` 配置 `CONFIG`。
+- 路径映射：宿主机 `${KSRPC_CONFIG_PATH}`（默认 `./ksrpc.conf.py`）→ 容器 `/etc/ksrpc/ksrpc.conf.py`。
+- Gunicorn 配置映射：宿主机 `${KSRPC_GUNICORN_CONFIG_PATH}`（默认 `./gunicorn.conf.py`）→ 容器 `/etc/ksrpc/gunicorn.conf.py`。
 
 ## pyi存根文件
 

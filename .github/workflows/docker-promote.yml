@@ -1,13 +1,11 @@
 name: Docker Promote
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       OCI_RELEASE_VERSION:
-        description: "Release version (supports v1.2.3, 1.2.3, 1.2.3-rc.N)"
-        required: true
+        description: "Release version (supports v1.2.3, 1.2.3, 1.2.3-rc.N; leave blank to auto-read ksrpc/_version.py)"
+        required: false
         type: string
       OCI_SOURCE_TAG:
         description: "Source tag to promote from"
@@ -80,8 +78,6 @@ jobs:
       - name: Resolve promotion targets
         id: resolve
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
           INPUT_OCI_RELEASE_VERSION: ${{ github.event.inputs.OCI_RELEASE_VERSION }}
           INPUT_OCI_SOURCE_TAG: ${{ github.event.inputs.OCI_SOURCE_TAG }}
           INPUT_OCI_PUBLISH_LATEST: ${{ github.event.inputs.OCI_PUBLISH_LATEST }}
@@ -90,19 +86,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "${EVENT_NAME}" == "release" ]]; then
-            raw_version="${RELEASE_TAG:-}"
-            publish_latest="true"
-            source_tag="edge"
-          else
-            raw_version="${INPUT_OCI_RELEASE_VERSION:-}"
-            publish_latest="${INPUT_OCI_PUBLISH_LATEST:-true}"
-            source_tag="${INPUT_OCI_SOURCE_TAG:-edge}"
-          fi
+          raw_version="${INPUT_OCI_RELEASE_VERSION:-}"
+          publish_latest="${INPUT_OCI_PUBLISH_LATEST:-true}"
+          source_tag="${INPUT_OCI_SOURCE_TAG:-edge}"
 
           if [[ -z "${raw_version}" ]]; then
-            echo "OCI_RELEASE_VERSION is required."
-            exit 1
+            if [[ ! -f "ksrpc/_version.py" ]]; then
+              echo "OCI_RELEASE_VERSION is empty and ksrpc/_version.py was not found."
+              exit 1
+            fi
+            raw_version="$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" "ksrpc/_version.py" | head -n1 || true)"
+            if [[ -z "${raw_version}" ]]; then
+              echo "OCI_RELEASE_VERSION is empty and failed to read __version__ from ksrpc/_version.py."
+              exit 1
+            fi
           fi
 
           version="${raw_version#v}"

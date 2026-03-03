@@ -1,31 +1,219 @@
-# This workflow will upload a Python Package using Twine when a release is created
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 name: Upload Python Package
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      source_type:
+        description: "Promotion source type"
+        required: true
+        type: choice
+        default: tag
+        options:
+          - tag
+          - branch
+          - sha
+      source_ref:
+        description: "Tag/branch name, or full commit SHA"
+        required: true
+        type: string
+      package_version:
+        description: "Optional version override; defaults to ksrpc/_version.py"
+        required: false
+        type: string
+      repository:
+        description: "Publish target repository"
+        required: true
+        type: choice
+        default: pypi
+        options:
+          - pypi
+          - testpypi
+      allow_non_tag:
+        description: "Allow branch/sha publish (not recommended)"
+        required: true
+        type: boolean
+        default: false
+      confirm_publish:
+        description: "Type publish to confirm this release"
+        required: true
+        type: string
+        default: ""
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ inputs.repository }}-${{ inputs.source_type }}-${{ inputs.source_ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.resolve_source.outputs.source_sha }}
+      package_version: ${{ steps.resolve_version.outputs.package_version }}
+      repository_url: ${{ steps.resolve_repo.outputs.repository_url }}
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        fetch-depth: 0
+        ref: ${{ inputs.source_ref }}
+        persist-credentials: false
+    - name: Validate source and resolve commit
+      id: resolve_source
+      env:
+        SOURCE_TYPE: ${{ inputs.source_type }}
+        SOURCE_REF: ${{ inputs.source_ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        ALLOW_NON_TAG: ${{ inputs.allow_non_tag }}
+        REPOSITORY: ${{ inputs.repository }}
+        CONFIRM_PUBLISH: ${{ inputs.confirm_publish }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [ "${CONFIRM_PUBLISH}" != "publish" ]; then
+          echo "confirm_publish must be exactly: publish" >&2
+          exit 1
+        fi
+
+        git fetch --force --tags origin
+        git fetch --force origin "+refs/heads/*:refs/remotes/origin/*"
+
+        case "${SOURCE_TYPE}" in
+          tag)
+            tag="${SOURCE_REF#refs/tags/}"
+            if ! git rev-parse -q --verify "refs/tags/${tag}^{commit}" >/dev/null; then
+              echo "Tag not found: ${tag}" >&2
+              exit 1
+            fi
+            source_sha="$(git rev-list -n 1 "refs/tags/${tag}")"
+            ;;
+          branch)
+            branch="${SOURCE_REF#refs/heads/}"
+            if ! git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+              echo "Branch not found on origin: ${branch}" >&2
+              exit 1
+            fi
+            source_sha="$(git rev-parse "refs/remotes/origin/${branch}^{commit}")"
+            ;;
+          sha)
+            if ! printf '%s' "${SOURCE_REF}" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+              echo "For source_type=sha, source_ref must be a full 40-char SHA." >&2
+              exit 1
+            fi
+            if ! git cat-file -e "${SOURCE_REF}^{commit}" 2>/dev/null; then
+              echo "Commit not found: ${SOURCE_REF}" >&2
+              exit 1
+            fi
+            source_sha="$(git rev-parse "${SOURCE_REF}^{commit}")"
+            ;;
+          *)
+            echo "Unsupported source_type: ${SOURCE_TYPE}" >&2
+            exit 1
+            ;;
+        esac
+
+        if [ "${SOURCE_TYPE}" != "tag" ] && [ "${ALLOW_NON_TAG}" != "true" ]; then
+          echo "Non-tag publish is blocked. Set allow_non_tag=true to proceed." >&2
+          exit 1
+        fi
+
+        if [ "${SOURCE_TYPE}" = "branch" ] || [ "${SOURCE_TYPE}" = "sha" ]; then
+          if ! git merge-base --is-ancestor "${source_sha}" "origin/${DEFAULT_BRANCH}"; then
+            echo "Selected commit is not reachable from origin/${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+        fi
+
+        if [ "${REPOSITORY}" = "pypi" ] && [ "${SOURCE_TYPE}" != "tag" ]; then
+          echo "Publishing to pypi requires source_type=tag." >&2
+          exit 1
+        fi
+
+        echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+    - name: Resolve package version
+      id: resolve_version
+      env:
+        INPUT_VERSION: ${{ inputs.package_version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        import ast
+        import os
+        import re
+        from pathlib import Path
+
+        override = os.getenv("INPUT_VERSION", "").strip()
+        version = ""
+
+        if override:
+          version = override
+        else:
+          path = Path("ksrpc/_version.py")
+          text = path.read_text(encoding="utf-8")
+          tree = ast.parse(text, filename=str(path))
+          found = []
+          for node in tree.body:
+            if isinstance(node, ast.Assign):
+              for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__version__":
+                  if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    found.append(node.value.value)
+                  else:
+                    raise SystemExit("__version__ must be assigned to a string literal.")
+
+          if len(found) != 1:
+            raise SystemExit("Expected exactly one __version__ assignment in ksrpc/_version.py.")
+          version = found[0]
+
+        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)+(?:[A-Za-z0-9_.+-]*)", version):
+          raise SystemExit(f"Invalid package version: {version!r}")
+
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+          fh.write(f"package_version={version}\n")
+        print(f"Resolved package version: {version}")
+        PY
+    - name: Validate tag and version consistency
+      if: ${{ inputs.source_type == 'tag' }}
+      env:
+        SOURCE_REF: ${{ inputs.source_ref }}
+        PACKAGE_VERSION: ${{ steps.resolve_version.outputs.package_version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        tag="${SOURCE_REF#refs/tags/}"
+        if [ "${tag}" != "${PACKAGE_VERSION}" ] && [ "${tag}" != "v${PACKAGE_VERSION}" ]; then
+          echo "Tag (${tag}) must match package version (${PACKAGE_VERSION}) or v${PACKAGE_VERSION}." >&2
+          exit 1
+        fi
+    - name: Resolve repository URL
+      id: resolve_repo
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "${REPOSITORY}" = "testpypi" ]; then
+          echo "repository_url=https://test.pypi.org/legacy/" >> "${GITHUB_OUTPUT}"
+        else
+          echo "repository_url=https://upload.pypi.org/legacy/" >> "${GITHUB_OUTPUT}"
+        fi
+
   test:
+    needs: [prepare]
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        ref: ${{ needs.prepare.outputs.source_sha }}
+        fetch-depth: 1
+        persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
@@ -52,13 +240,17 @@ jobs:
         fi
 
   deploy:
-    needs: [test]
+    needs: [prepare, test]
 
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        ref: ${{ needs.prepare.outputs.source_sha }}
+        fetch-depth: 1
+        persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
@@ -69,6 +261,41 @@ jobs:
         pip install build twine
     - name: Build package
       run: python -m build
+    - name: Verify dist version
+      env:
+        EXPECTED_VERSION: ${{ needs.prepare.outputs.package_version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        import glob
+        import os
+        import sys
+
+        expected = os.environ["EXPECTED_VERSION"]
+        files = sorted(glob.glob("dist/*"))
+        if not files:
+          print("No files found in dist/", file=sys.stderr)
+          raise SystemExit(1)
+
+        bad = []
+        for path in files:
+          name = os.path.basename(path)
+          if name == f"ksrpc-{expected}.tar.gz":
+            continue
+          if name == f"ksrpc-{expected}.zip":
+            continue
+          if name.startswith(f"ksrpc-{expected}-"):
+            continue
+          else:
+            bad.append(name)
+
+        if bad:
+          print("Unexpected dist filenames:", ", ".join(bad), file=sys.stderr)
+          raise SystemExit(1)
+
+        print(f"All dist filenames match expected version: {expected}")
+        PY
     - name: Check distribution metadata
       run: twine check dist/*
     - name: Upload dist artifacts
@@ -83,3 +310,4 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
+        repository-url: ${{ needs.prepare.outputs.repository_url }}

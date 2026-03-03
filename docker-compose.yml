@@ -2,16 +2,16 @@ services:
   ksrpc:
     image: ${OCI_IMAGE_REF}
     container_name: ${KSRPC_CONTAINER_NAME}
-    restart: always # managed as deployment template default
+    restart: always # managed as deployment template default  
     command: ["python", "-u", "-m", "gunicorn", "-c", "/etc/ksrpc/gunicorn.conf.py", "ksrpc.run_gunicorn:web_app"]
     env_file:
       - .env
     environment:
-      CONFIG: ${CONFIG:-/app/deploy/custom_config.py}
-      KSRPC_CACHE_PATH: /opt/ksrpc/cache
+      CONFIG: /etc/ksrpc/ksrpc.conf.py
     volumes:
-      - "${KSRPC_GUNICORN_CONFIG_HOST_DIR:-.}:/etc/ksrpc:ro"
-      - "${KSRPC_CACHE_HOST_PATH:-./data/cache}:/opt/ksrpc/cache"
+      - "${KSRPC_GUNICORN_CONFIG_PATH:-./gunicorn.conf.py}:/etc/ksrpc/gunicorn.conf.py:ro"
+      - "${KSRPC_CONFIG_PATH:-./ksrpc.conf.py}:/etc/ksrpc/ksrpc.conf.py:ro"
+      - "${KSRPC_CACHE_HOST_PATH:-./data/cache}:${KSRPC_CACHE_PATH:-/opt/ksrpc/cache}"
     ports:
       - "${KSRPC_HOST_PORT}:${KSRPC_PORT}"
     healthcheck:
