@@ -11,6 +11,19 @@ permissions:
   contents: read
 
 jobs:
+  guard_branch:
+    name: Docker Publish / Branch Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require docker branch for manual publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/docker" ]]; then
+            echo "::error::Manual publish is allowed only on refs/heads/docker. Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+
   publish_pr:
     name: Docker Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
@@ -28,6 +41,7 @@ jobs:
 
   publish_edge:
     name: Docker Publish / Edge
+    needs: [guard_branch]
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/docker-publish.reusable.yml
     with:
