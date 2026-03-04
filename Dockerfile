@@ -10,9 +10,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CONFIG=""
 
+ARG KSRPC_PIP_PACKAGE=.
+ARG PIP_INDEX_URL=
+ARG PIP_EXTRA_INDEX_URL=
+ARG PIP_TRUSTED_HOST=
+
 COPY . /app
 
-RUN pip install --no-cache-dir .
+RUN set -eu \
+    && PIP_INDEX_URL="${PIP_INDEX_URL}" PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL}" PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST}" pip install --no-cache-dir "${KSRPC_PIP_PACKAGE}" \
+    && if [ "${KSRPC_PIP_PACKAGE}" != "." ]; then rm -rf /app/ksrpc; fi
 
 EXPOSE 8080
 

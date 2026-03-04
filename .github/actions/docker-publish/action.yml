@@ -72,6 +72,26 @@ inputs:
     description: Nexus registry password
     required: false
     default: ""
+  PYPI_UPLOAD_WHEEL:
+    description: Whether to build and upload wheel to Nexus PyPI
+    required: false
+    default: "false"
+  PYPI_REPOSITORY_URL:
+    description: Nexus PyPI repository upload URL
+    required: false
+    default: ""
+  PYPI_SIMPLE_URL:
+    description: Nexus PyPI simple index URL
+    required: false
+    default: ""
+  PYPI_PACKAGE_NAME:
+    description: Python package name
+    required: false
+    default: ksrpc
+  PYPI_TRUSTED_HOST:
+    description: Optional trusted host for pip install command in image build
+    required: false
+    default: ""
 
 outputs:
   image_ref:
@@ -86,6 +106,15 @@ outputs:
   image_with_digest:
     description: Image reference pinned by digest
     value: ${{ steps.final_ref.outputs.image_with_digest }}
+  wheel_file:
+    description: Built wheel filename
+    value: ${{ steps.wheel.outputs.wheel_file }}
+  wheel_version:
+    description: Built wheel version
+    value: ${{ steps.wheel.outputs.wheel_version }}
+  wheel_install_cmd:
+    description: Install command from Nexus PyPI
+    value: ${{ steps.wheel.outputs.wheel_install_cmd }}
 
 runs:
   using: composite
@@ -168,6 +197,90 @@ runs:
           echo "image_tags=${image_tags_csv}"
         } >> "${GITHUB_OUTPUT}"
 
+    - name: Build and upload wheel to Nexus PyPI
+      id: wheel
+      if: ${{ inputs.PYPI_UPLOAD_WHEEL == 'true' }}
+      shell: bash
+      env:
+        PYPI_REPOSITORY_URL: ${{ inputs.PYPI_REPOSITORY_URL }}
+        PYPI_SIMPLE_URL: ${{ inputs.PYPI_SIMPLE_URL }}
+        PYPI_PACKAGE_NAME: ${{ inputs.PYPI_PACKAGE_NAME }}
+        PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
+        TWINE_USERNAME: ${{ inputs.nexus_username }}
+        TWINE_PASSWORD: ${{ inputs.nexus_password }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${PYPI_REPOSITORY_URL}" || -z "${PYPI_SIMPLE_URL}" ]]; then
+          echo "PYPI_REPOSITORY_URL and PYPI_SIMPLE_URL are required when PYPI_UPLOAD_WHEEL=true" >&2
+          exit 1
+        fi
+
+        python3 -m pip install --upgrade pip build twine
+        rm -rf dist
+        python3 -m build --wheel --outdir dist
+
+        wheel_file="$(ls -1 dist/*.whl | head -n1)"
+        if [[ -z "${wheel_file}" ]]; then
+          echo "no wheel artifact found in dist/" >&2
+          exit 1
+        fi
+        wheel_base="$(basename "${wheel_file}")"
+        wheel_version="$(
+          python3 -c 'import re,sys; w=sys.argv[1]; m=re.match(r"^[^-]+-([^-]+)-", w); print(m.group(1) if m else "")' "${wheel_base}"
+        )"
+        if [[ -z "${wheel_version}" ]]; then
+          echo "failed to parse wheel version from ${wheel_base}" >&2
+          exit 1
+        fi
+
+        python3 -m twine upload --non-interactive --skip-existing --repository-url "${PYPI_REPOSITORY_URL}" "${wheel_file}"
+
+        install_cmd="pip install --index-url ${PYPI_SIMPLE_URL}"
+        if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
+          install_cmd="${install_cmd} --trusted-host ${PYPI_TRUSTED_HOST}"
+        fi
+        install_cmd="${install_cmd} ${PYPI_PACKAGE_NAME}==${wheel_version}"
+
+        {
+          echo "wheel_file=${wheel_base}"
+          echo "wheel_version=${wheel_version}"
+          echo "wheel_install_cmd=${install_cmd}"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Resolve build args
+      id: build_args
+      shell: bash
+      env:
+        OCI_BUILD_ARGS: ${{ inputs.OCI_BUILD_ARGS }}
+        PYPI_UPLOAD_WHEEL: ${{ inputs.PYPI_UPLOAD_WHEEL }}
+        PYPI_PACKAGE_NAME: ${{ inputs.PYPI_PACKAGE_NAME }}
+        PYPI_SIMPLE_URL: ${{ inputs.PYPI_SIMPLE_URL }}
+        PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
+        WHEEL_VERSION: ${{ steps.wheel.outputs.wheel_version }}
+      run: |
+        set -euo pipefail
+
+        {
+          echo "build_args<<EOF"
+          if [[ -n "${OCI_BUILD_ARGS}" ]]; then
+            printf '%s\n' "${OCI_BUILD_ARGS}"
+          fi
+
+          if [[ "${PYPI_UPLOAD_WHEEL}" == "true" ]]; then
+            if [[ -z "${WHEEL_VERSION}" ]]; then
+              echo "wheel version is empty while PYPI_UPLOAD_WHEEL=true" >&2
+              exit 1
+            fi
+            echo "KSRPC_PIP_PACKAGE=${PYPI_PACKAGE_NAME}==${WHEEL_VERSION}"
+            echo "PIP_INDEX_URL=${PYPI_SIMPLE_URL}"
+            if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
+              echo "PIP_TRUSTED_HOST=${PYPI_TRUSTED_HOST}"
+            fi
+          fi
+          echo "EOF"
+        } >> "${GITHUB_OUTPUT}"
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
@@ -188,7 +301,7 @@ runs:
         platforms: ${{ inputs.OCI_TARGET_PLATFORMS }}
         push: ${{ inputs.OCI_PUSH_IMAGE == 'true' }}
         tags: ${{ steps.tags.outputs.tags }}
-        build-args: ${{ inputs.OCI_BUILD_ARGS }}
+        build-args: ${{ steps.build_args.outputs.build_args }}
 
     - name: Resolve digest reference
       id: final_ref

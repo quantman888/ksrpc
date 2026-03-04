@@ -39,6 +39,20 @@ pip install ksrpc -i https://mirrors.aliyun.com/pypi/simple --upgrade
 pip install ksrpc -i https://pypi.org/simple --upgrade
 ```
 
+### 从 Nexus 安装（内部仓库）
+
+```bash
+# 最新版本
+pip install --index-url "https://你的nexus域名/repository/pypi-hosted/simple" \
+  --trusted-host "你的nexus域名" \
+  --upgrade ksrpc
+
+# 指定版本（推荐与 Docker Publish Summary 的 PYPI_WHEEL_VERSION 对齐）
+pip install --index-url "https://你的nexus域名/repository/pypi-hosted/simple" \
+  --trusted-host "你的nexus域名" \
+  --upgrade "ksrpc==0.7.0"
+```
+
 ## Docker 部署（docker 分支）
 
 1. 准备环境变量与外部配置模板

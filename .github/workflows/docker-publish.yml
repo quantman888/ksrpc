@@ -34,6 +34,9 @@ jobs:
       image_tags: ${{ steps.publish.outputs.image_tags }}
       digest: ${{ steps.publish.outputs.digest }}
       image_with_digest: ${{ steps.publish.outputs.image_with_digest }}
+      wheel_file: ${{ steps.publish.outputs.wheel_file }}
+      wheel_version: ${{ steps.publish.outputs.wheel_version }}
+      wheel_install_cmd: ${{ steps.publish.outputs.wheel_install_cmd }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -50,6 +53,7 @@ jobs:
           OCI_PUSH_IMAGE: 'false'
           OCI_PUBLISH_CHANNEL: none
           OCI_PUBLISH_LATEST: 'false'
+          PYPI_UPLOAD_WHEEL: 'false'
           nexus_username: ${{ secrets.NEXUS_USERNAME }}
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
@@ -64,6 +68,9 @@ jobs:
       image_tags: ${{ steps.publish.outputs.image_tags }}
       digest: ${{ steps.publish.outputs.digest }}
       image_with_digest: ${{ steps.publish.outputs.image_with_digest }}
+      wheel_file: ${{ steps.publish.outputs.wheel_file }}
+      wheel_version: ${{ steps.publish.outputs.wheel_version }}
+      wheel_install_cmd: ${{ steps.publish.outputs.wheel_install_cmd }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -82,6 +89,11 @@ jobs:
           OCI_GATE_VULN_SEVERITY: CRITICAL
           OCI_GATE_VULN_IGNORE_UNFIXED: 'true'
           OCI_PUBLISH_LATEST: 'false'
+          PYPI_UPLOAD_WHEEL: 'true'
+          PYPI_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL }}
+          PYPI_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL }}
+          PYPI_PACKAGE_NAME: ksrpc
+          PYPI_TRUSTED_HOST: ${{ vars.NEXUS_PYPI_TRUSTED_HOST }}
           nexus_username: ${{ secrets.NEXUS_USERNAME }}
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
@@ -96,6 +108,9 @@ jobs:
       OCI_IMAGE_REF: ${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}
       OCI_IMAGE_TAGS: ${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}
       OCI_DIGEST: ${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}
+      PYPI_WHEEL_FILE: ${{ needs.publish_pr.outputs.wheel_file || needs.publish_edge.outputs.wheel_file }}
+      PYPI_WHEEL_VERSION: ${{ needs.publish_pr.outputs.wheel_version || needs.publish_edge.outputs.wheel_version }}
+      PYPI_INSTALL_CMD: ${{ needs.publish_pr.outputs.wheel_install_cmd || needs.publish_edge.outputs.wheel_install_cmd }}
     steps:
       - name: Resolve summary outputs
         id: summary
@@ -104,16 +119,23 @@ jobs:
           OCI_IMAGE_REF="${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}"
           OCI_IMAGE_TAGS="${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}"
           OCI_DIGEST="${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}"
+          PYPI_WHEEL_FILE="${{ needs.publish_pr.outputs.wheel_file || needs.publish_edge.outputs.wheel_file }}"
+          PYPI_WHEEL_VERSION="${{ needs.publish_pr.outputs.wheel_version || needs.publish_edge.outputs.wheel_version }}"
+          PYPI_INSTALL_CMD="${{ needs.publish_pr.outputs.wheel_install_cmd || needs.publish_edge.outputs.wheel_install_cmd }}"
 
           {
             echo "OCI_IMAGE_WITH_DIGEST=${OCI_IMAGE_WITH_DIGEST}"
             echo "OCI_IMAGE_REF=${OCI_IMAGE_REF}"
             echo "OCI_IMAGE_TAGS=${OCI_IMAGE_TAGS}"
             echo "OCI_DIGEST=${OCI_DIGEST}"
+            echo "PYPI_WHEEL_FILE=${PYPI_WHEEL_FILE}"
+            echo "PYPI_WHEEL_VERSION=${PYPI_WHEEL_VERSION}"
+            echo "PYPI_INSTALL_CMD=${PYPI_INSTALL_CMD}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Show reusable workflow outputs
         run: |
+          PYPI_INSTALL_CMD="${{ steps.summary.outputs.PYPI_INSTALL_CMD }}"
           {
             echo "### Docker Publish Summary"
             echo ""
@@ -121,4 +143,9 @@ jobs:
             echo "- OCI_IMAGE_REF: \`${{ steps.summary.outputs.OCI_IMAGE_REF }}\`"
             echo "- OCI_IMAGE_TAGS: \`${{ steps.summary.outputs.OCI_IMAGE_TAGS }}\`"
             echo "- OCI_DIGEST: \`${{ steps.summary.outputs.OCI_DIGEST }}\`"
+            echo "- PYPI_WHEEL_FILE: \`${{ steps.summary.outputs.PYPI_WHEEL_FILE }}\`"
+            echo "- PYPI_WHEEL_VERSION: \`${{ steps.summary.outputs.PYPI_WHEEL_VERSION }}\`"
+            if [[ -n "${PYPI_INSTALL_CMD}" ]]; then
+              echo "- PYPI_INSTALL_CMD: \`${PYPI_INSTALL_CMD}\`"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
