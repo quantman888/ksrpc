@@ -345,6 +345,8 @@ runs:
 
     - name: Build and push image
       id: build
+      env:
+        DOCKER_BUILD_RECORD_UPLOAD: "false"
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
       with:
         context: ${{ inputs.OCI_BUILD_CONTEXT }}
@@ -491,48 +493,6 @@ runs:
           "${trivy_image}" \
           "${scan_args[@]}" \
           "${IMAGE_WITH_DIGEST}"
-
-    - name: Generate Trivy JSON report
-      if: ${{ always() && inputs.OCI_PUSH_IMAGE == 'true' && steps.final_ref.outputs.image_with_digest != '' }}
-      shell: bash
-      env:
-        IMAGE_WITH_DIGEST: ${{ steps.final_ref.outputs.image_with_digest }}
-        OCI_GATE_VULN_SEVERITY: ${{ inputs.OCI_GATE_VULN_SEVERITY }}
-        OCI_GATE_VULN_IGNORE_UNFIXED: ${{ inputs.OCI_GATE_VULN_IGNORE_UNFIXED }}
-        TRIVY_REPORT_PATH: .artifacts/trivy/trivy-report.json
-      run: |
-        set -euo pipefail
-
-        mkdir -p "$(dirname "${TRIVY_REPORT_PATH}")"
-
-        trivy_image="aquasec/trivy:latest"
-        scan_args=(
-          image
-          --scanners vuln
-          --format json
-          --exit-code 0
-          --severity "${OCI_GATE_VULN_SEVERITY}"
-        )
-
-        if [[ "${OCI_GATE_VULN_IGNORE_UNFIXED}" == "true" ]]; then
-          scan_args+=(--ignore-unfixed)
-        fi
-
-        if ! docker run --rm \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          "${trivy_image}" \
-          "${scan_args[@]}" \
-          "${IMAGE_WITH_DIGEST}" > "${TRIVY_REPORT_PATH}"; then
-          echo '{"error":"trivy_json_report_failed"}' > "${TRIVY_REPORT_PATH}"
-        fi
-
-    - name: Upload Trivy JSON report
-      if: ${{ always() && inputs.OCI_PUSH_IMAGE == 'true' && steps.final_ref.outputs.image_with_digest != '' }}
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-      with:
-        name: trivy-image-report
-        path: .artifacts/trivy/trivy-report.json
-        if-no-files-found: warn
 
     - name: Cleanup gate container
       if: ${{ always() && steps.startup.outputs.container_name != '' }}
