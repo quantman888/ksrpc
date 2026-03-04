@@ -32,16 +32,28 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: sync-upstream-main
   cancel-in-progress: true
 
 jobs:
+  runner_probe:
+    name: Sync Upstream / Runner Probe
+    uses: ./.github/workflows/runner-fallback.reusable.yml
+    with:
+      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
+      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
+      RUNNER_FALLBACK_POLICY: github-hosted
+    secrets:
+      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
+
   sync:
     name: Sync Upstream / Fast Forward
+    needs: [runner_probe]
     if: ${{ github.ref_name == 'ops/sync' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
     env:
       TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
       UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'wukan1986/ksrpc' }}
