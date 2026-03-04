@@ -215,6 +215,10 @@ runs:
           echo "PYPI_REPOSITORY_URL and PYPI_SIMPLE_URL are required when PYPI_UPLOAD_WHEEL=true" >&2
           exit 1
         fi
+        if [[ -z "${TWINE_USERNAME}" || -z "${TWINE_PASSWORD}" ]]; then
+          echo "nexus_username and nexus_password are required when PYPI_UPLOAD_WHEEL=true" >&2
+          exit 1
+        fi
 
         python3 -m pip install --upgrade pip build twine
         rm -rf dist
@@ -240,7 +244,7 @@ runs:
         upload_rc=$?
         set -e
         if [[ "${upload_rc}" -ne 0 ]]; then
-          if grep -Eiq "(already exists|File already exists|409 Conflict|400 Bad Request)" "${upload_log}"; then
+          if grep -Eiq "(already exists|File already exists|409 Conflict)" "${upload_log}"; then
             echo "wheel already exists in repository, continue."
           else
             cat "${upload_log}" >&2
