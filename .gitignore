@@ -1,0 +1,6 @@
+# Local secrets and environment files
+.env
+.env.*
+
+# Keep template tracked
+!.env.example
