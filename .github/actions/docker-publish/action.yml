@@ -224,7 +224,15 @@ runs:
 
         version_file="ksrpc/_version.py"
         base_version="$(
-          "${tool_venv}/bin/python" -c 'import pathlib,re,sys; text=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"); m=re.search(r"__version__\s*=\s*[\"'\"'\"']([^\"'\"'\"']+)[\"'\"'\"']", text); print(m.group(1) if m else "")' "${version_file}"
+          VERSION_FILE="${version_file}" "${tool_venv}/bin/python" - <<'PY'
+        import os
+        import pathlib
+        import re
+
+        text = pathlib.Path(os.environ["VERSION_FILE"]).read_text(encoding="utf-8")
+        m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
+        print(m.group(1) if m else "")
+        PY
         )"
         if [[ -z "${base_version}" ]]; then
           echo "failed to read base version from ${version_file}" >&2
@@ -233,9 +241,29 @@ runs:
         short_sha="${GITHUB_SHA:0:12}"
         build_stamp="$(date -u +%Y%m%d%H%M%S)"
         dev_version="$(
-          "${tool_venv}/bin/python" -c 'import re,sys; base=sys.argv[1]; stamp=sys.argv[2]; sha=sys.argv[3]; base=re.sub(r"\+.*$","",base); base=re.sub(r"\.dev\d+$","",base); print(f"{base}.dev{stamp}+g{sha}")' "${base_version}" "${build_stamp}" "${short_sha}"
+          BASE_VERSION="${base_version}" BUILD_STAMP="${build_stamp}" SHORT_SHA="${short_sha}" "${tool_venv}/bin/python" - <<'PY'
+        import os
+        import re
+
+        base = os.environ["BASE_VERSION"]
+        base = re.sub(r"\+.*$", "", base)
+        base = re.sub(r"\.dev\d+$", "", base)
+        print(f"{base}.dev{os.environ['BUILD_STAMP']}+g{os.environ['SHORT_SHA']}")
+        PY
         )"
-        DEV_VERSION="${dev_version}" "${tool_venv}/bin/python" -c 'import os,pathlib,re,sys; p=pathlib.Path(sys.argv[1]); text=p.read_text(encoding="utf-8"); v=os.environ["DEV_VERSION"]; new,n=re.subn(r"__version__\s*=\s*[\"'\"'\"'][^\"'\"'\"']+[\"'\"'\"']", f"__version__ = \"{v}\"", text, count=1); assert n==1, "rewrite __version__ failed"; p.write_text(new, encoding="utf-8")' "${version_file}"
+        DEV_VERSION="${dev_version}" VERSION_FILE="${version_file}" "${tool_venv}/bin/python" - <<'PY'
+        import os
+        import pathlib
+        import re
+
+        p = pathlib.Path(os.environ["VERSION_FILE"])
+        text = p.read_text(encoding="utf-8")
+        v = os.environ["DEV_VERSION"]
+        new, n = re.subn(r'__version__\s*=\s*["\'][^"\']+["\']', f'__version__ = "{v}"', text, count=1)
+        if n != 1:
+            raise SystemExit("rewrite __version__ failed")
+        p.write_text(new, encoding="utf-8")
+        PY
         echo "generated wheel version: ${dev_version}"
 
         rm -rf dist
