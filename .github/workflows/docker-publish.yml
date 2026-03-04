@@ -24,39 +24,6 @@ jobs:
             exit 1
           fi
 
-  publish_pr:
-    name: Docker Publish / PR Dry Run
-    if: ${{ github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
-    outputs:
-      image_ref: ${{ steps.publish.outputs.image_ref }}
-      image_tags: ${{ steps.publish.outputs.image_tags }}
-      digest: ${{ steps.publish.outputs.digest }}
-      image_with_digest: ${{ steps.publish.outputs.image_with_digest }}
-      wheel_file: ${{ steps.publish.outputs.wheel_file }}
-      wheel_version: ${{ steps.publish.outputs.wheel_version }}
-      wheel_install_cmd: ${{ steps.publish.outputs.wheel_install_cmd }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Publish image
-        id: publish
-        uses: ./.github/actions/docker-publish
-        with:
-          OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
-          OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-          OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
-          OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
-          OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
-          OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
-          OCI_PUSH_IMAGE: 'false'
-          OCI_PUBLISH_CHANNEL: none
-          OCI_PUBLISH_LATEST: 'false'
-          PYPI_UPLOAD_WHEEL: 'false'
-          nexus_username: ${{ secrets.NEXUS_USERNAME }}
-          nexus_password: ${{ secrets.NEXUS_PASSWORD }}
-
   publish_edge:
     name: Docker Publish / Edge
     needs: [guard_branch]
@@ -100,28 +67,28 @@ jobs:
   publish_summary:
     name: Docker Publish / Summary
     if: ${{ always() && !cancelled() }}
-    needs: [publish_pr, publish_edge]
+    needs: [publish_edge]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}
-      OCI_IMAGE_REF: ${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}
-      OCI_IMAGE_TAGS: ${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}
-      OCI_DIGEST: ${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}
-      PYPI_WHEEL_FILE: ${{ needs.publish_pr.outputs.wheel_file || needs.publish_edge.outputs.wheel_file }}
-      PYPI_WHEEL_VERSION: ${{ needs.publish_pr.outputs.wheel_version || needs.publish_edge.outputs.wheel_version }}
-      PYPI_INSTALL_CMD: ${{ needs.publish_pr.outputs.wheel_install_cmd || needs.publish_edge.outputs.wheel_install_cmd }}
+      OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_edge.outputs.image_with_digest }}
+      OCI_IMAGE_REF: ${{ needs.publish_edge.outputs.image_ref }}
+      OCI_IMAGE_TAGS: ${{ needs.publish_edge.outputs.image_tags }}
+      OCI_DIGEST: ${{ needs.publish_edge.outputs.digest }}
+      PYPI_WHEEL_FILE: ${{ needs.publish_edge.outputs.wheel_file }}
+      PYPI_WHEEL_VERSION: ${{ needs.publish_edge.outputs.wheel_version }}
+      PYPI_INSTALL_CMD: ${{ needs.publish_edge.outputs.wheel_install_cmd }}
     steps:
       - name: Resolve summary outputs
         id: summary
         run: |
-          OCI_IMAGE_WITH_DIGEST="${{ needs.publish_pr.outputs.image_with_digest || needs.publish_edge.outputs.image_with_digest }}"
-          OCI_IMAGE_REF="${{ needs.publish_pr.outputs.image_ref || needs.publish_edge.outputs.image_ref }}"
-          OCI_IMAGE_TAGS="${{ needs.publish_pr.outputs.image_tags || needs.publish_edge.outputs.image_tags }}"
-          OCI_DIGEST="${{ needs.publish_pr.outputs.digest || needs.publish_edge.outputs.digest }}"
-          PYPI_WHEEL_FILE="${{ needs.publish_pr.outputs.wheel_file || needs.publish_edge.outputs.wheel_file }}"
-          PYPI_WHEEL_VERSION="${{ needs.publish_pr.outputs.wheel_version || needs.publish_edge.outputs.wheel_version }}"
-          PYPI_INSTALL_CMD="${{ needs.publish_pr.outputs.wheel_install_cmd || needs.publish_edge.outputs.wheel_install_cmd }}"
+          OCI_IMAGE_WITH_DIGEST="${{ needs.publish_edge.outputs.image_with_digest }}"
+          OCI_IMAGE_REF="${{ needs.publish_edge.outputs.image_ref }}"
+          OCI_IMAGE_TAGS="${{ needs.publish_edge.outputs.image_tags }}"
+          OCI_DIGEST="${{ needs.publish_edge.outputs.digest }}"
+          PYPI_WHEEL_FILE="${{ needs.publish_edge.outputs.wheel_file }}"
+          PYPI_WHEEL_VERSION="${{ needs.publish_edge.outputs.wheel_version }}"
+          PYPI_INSTALL_CMD="${{ needs.publish_edge.outputs.wheel_install_cmd }}"
 
           {
             echo "OCI_IMAGE_WITH_DIGEST=${OCI_IMAGE_WITH_DIGEST}"

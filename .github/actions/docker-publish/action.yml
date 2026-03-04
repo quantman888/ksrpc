@@ -119,9 +119,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
     - name: Resolve image tags
       id: tags
       shell: bash
@@ -273,10 +270,7 @@ runs:
         OCI_BUILD_ARGS: ${{ inputs.OCI_BUILD_ARGS }}
         PYPI_UPLOAD_WHEEL: ${{ inputs.PYPI_UPLOAD_WHEEL }}
         PYPI_PACKAGE_NAME: ${{ inputs.PYPI_PACKAGE_NAME }}
-        PYPI_SIMPLE_URL: ${{ inputs.PYPI_SIMPLE_URL }}
         PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
-        NEXUS_USERNAME: ${{ inputs.nexus_username }}
-        NEXUS_PASSWORD: ${{ inputs.nexus_password }}
         WHEEL_VERSION: ${{ steps.wheel.outputs.wheel_version }}
       run: |
         set -euo pipefail
@@ -293,17 +287,50 @@ runs:
           fi
 
           if [[ "${PYPI_UPLOAD_WHEEL}" == "true" ]]; then
-            auth_pypi_simple_url="$(
-              python3 -c "import os, urllib.parse as u; url=os.environ['PYPI_SIMPLE_URL']; user=os.environ.get('NEXUS_USERNAME',''); pwd=os.environ.get('NEXUS_PASSWORD',''); parts=u.urlsplit(url); host=parts.hostname or ''; port=f':{parts.port}' if parts.port else ''; netloc=(u.quote(user, safe='') + ':' + u.quote(pwd, safe='') + '@' + host + port if user and pwd else parts.netloc); print(u.urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)))"
-            )"
             echo "KSRPC_PIP_PACKAGE=${PYPI_PACKAGE_NAME}==${WHEEL_VERSION}"
-            echo "PIP_INDEX_URL=${auth_pypi_simple_url}"
             if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
               echo "PIP_TRUSTED_HOST=${PYPI_TRUSTED_HOST}"
             fi
           fi
           echo "EOF"
         } >> "${GITHUB_OUTPUT}"
+
+    - name: Resolve build secret files
+      id: build_secrets
+      shell: bash
+      env:
+        PYPI_UPLOAD_WHEEL: ${{ inputs.PYPI_UPLOAD_WHEEL }}
+        PYPI_SIMPLE_URL: ${{ inputs.PYPI_SIMPLE_URL }}
+        PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
+        NEXUS_USERNAME: ${{ inputs.nexus_username }}
+        NEXUS_PASSWORD: ${{ inputs.nexus_password }}
+      run: |
+        set -euo pipefail
+
+        if [[ "${PYPI_UPLOAD_WHEEL}" != "true" ]]; then
+          echo "secret_files=" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        if [[ -z "${PYPI_SIMPLE_URL}" || -z "${NEXUS_USERNAME}" || -z "${NEXUS_PASSWORD}" ]]; then
+          echo "PYPI_SIMPLE_URL, nexus_username, and nexus_password are required when PYPI_UPLOAD_WHEEL=true" >&2
+          exit 1
+        fi
+
+        auth_pypi_simple_url="$(
+          python3 -c "import os, urllib.parse as u; url=os.environ['PYPI_SIMPLE_URL']; user=os.environ.get('NEXUS_USERNAME',''); pwd=os.environ.get('NEXUS_PASSWORD',''); parts=u.urlsplit(url); host=parts.hostname or ''; port=f':{parts.port}' if parts.port else ''; netloc=(u.quote(user, safe='') + ':' + u.quote(pwd, safe='') + '@' + host + port if user and pwd else parts.netloc); print(u.urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)))"
+        )"
+
+        pip_conf_file="$(mktemp)"
+        {
+          echo "[global]"
+          echo "index-url = ${auth_pypi_simple_url}"
+          if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
+            echo "trusted-host = ${PYPI_TRUSTED_HOST}"
+          fi
+        } > "${pip_conf_file}"
+        chmod 600 "${pip_conf_file}"
+        echo "secret_files=ksrpc_pip_conf=${pip_conf_file}" >> "${GITHUB_OUTPUT}"
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -326,6 +353,7 @@ runs:
         push: ${{ inputs.OCI_PUSH_IMAGE == 'true' }}
         tags: ${{ steps.tags.outputs.tags }}
         build-args: ${{ steps.build_args.outputs.build_args }}
+        secret-files: ${{ steps.build_secrets.outputs.secret_files }}
 
     - name: Resolve digest reference
       id: final_ref
