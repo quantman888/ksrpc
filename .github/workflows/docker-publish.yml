@@ -49,8 +49,6 @@ jobs:
         shell: bash
         env:
           BASE_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
-          NEXUS_PYPI_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL }}
-          NEXUS_PYPI_TRUSTED_HOST: ${{ vars.NEXUS_PYPI_TRUSTED_HOST }}
         run: |
           set -euo pipefail
 
@@ -77,16 +75,7 @@ jobs:
                 build_args="${build_args}"$'\n'
               fi
               build_args="${build_args}KSRPC_PIP_PACKAGE=${upstream_package_spec}"
-
-              if [[ -n "${NEXUS_PYPI_SIMPLE_URL:-}" ]]; then
-                upstream_install_cmd="pip install --index-url ${NEXUS_PYPI_SIMPLE_URL}"
-                if [[ -n "${NEXUS_PYPI_TRUSTED_HOST:-}" ]]; then
-                  upstream_install_cmd="${upstream_install_cmd} --trusted-host ${NEXUS_PYPI_TRUSTED_HOST}"
-                fi
-              else
-                upstream_install_cmd="pip install"
-              fi
-              upstream_install_cmd="${upstream_install_cmd} ${upstream_package_spec}"
+              upstream_install_cmd="pip install ${upstream_package_spec}"
               ;;
             *)
               echo "unsupported branch: ${ref}" >&2
