@@ -9,11 +9,23 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  runner_probe:
+    name: Docker Publish / Runner Probe
+    uses: ./.github/workflows/runner-fallback.reusable.yml
+    with:
+      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
+      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
+      RUNNER_FALLBACK_POLICY: github-hosted
+    secrets:
+      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
+
   guard_branch:
     name: Docker Publish / Branch Guard
-    runs-on: ubuntu-latest
+    needs: [runner_probe]
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
     steps:
       - name: Require docker or docker-stable branch for manual publish
         shell: bash
@@ -26,9 +38,9 @@ jobs:
 
   publish_edge:
     name: Docker Publish / Edge
-    needs: [guard_branch]
+    needs: [runner_probe, guard_branch]
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
     timeout-minutes: 50
     outputs:
       image_ref: ${{ steps.publish.outputs.image_ref }}
@@ -120,8 +132,8 @@ jobs:
   publish_summary:
     name: Docker Publish / Summary
     if: ${{ always() && !cancelled() }}
-    needs: [publish_edge]
-    runs-on: ubuntu-latest
+    needs: [runner_probe, publish_edge]
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
     timeout-minutes: 10
     outputs:
       OCI_IMAGE_WITH_DIGEST: ${{ needs.publish_edge.outputs.image_with_digest }}
