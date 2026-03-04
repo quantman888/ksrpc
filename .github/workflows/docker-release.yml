@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       OCI_RELEASE_VERSION:
-        description: "Release version (supports v1.2.3, 1.2.3, 1.2.3-rc.N; leave blank to auto-read ksrpc/_version.py)"
+        description: "Release version (supports v1.2.3, 1.2.3, 1.2.3-rc.N; leave blank to auto-read ksrpc/_version.py or latest ksrpc on PyPI)"
         required: false
         type: string
       OCI_SOURCE_TAG:
@@ -51,27 +51,25 @@ jobs:
           fi
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.x"
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest
-      - name: Run tests
+      - name: Validate deployment files
         shell: bash
         run: |
-          set +e
-          python -m pytest -q tests
-          rc=$?
-          set -e
-
-          if [ "${rc}" -eq 0 ]; then
-            echo "pytest passed."
-          elif [ "${rc}" -eq 5 ]; then
-            echo "pytest exit code 5 (no tests collected), treated as success."
-          else
-            echo "pytest failed with exit code ${rc}."
-            exit "${rc}"
+          set -euo pipefail
+          required_files=(
+            "Dockerfile"
+            ".env.example"
+            "gunicorn.conf.py"
+            "ksrpc.conf.py"
+          )
+          for f in "${required_files[@]}"; do
+            if [[ ! -f "${f}" ]]; then
+              echo "::error::missing required deployment file: ${f}"
+              exit 1
+            fi
+          done
+          if [[ ! -f "docker-compose.yml" && ! -f "docker-compose.yaml" ]]; then
+            echo "::error::missing required deployment file: docker-compose.yml or docker-compose.yaml"
+            exit 1
           fi
 
   promote:
@@ -133,13 +131,14 @@ jobs:
           esac
 
           if [[ -z "${raw_version}" ]]; then
-            if [[ ! -f "ksrpc/_version.py" ]]; then
-              echo "OCI_RELEASE_VERSION is empty and ksrpc/_version.py was not found."
-              exit 1
+            if [[ -f "ksrpc/_version.py" ]]; then
+              raw_version="$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" "ksrpc/_version.py" | head -n1 || true)"
             fi
-            raw_version="$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*$/\1/p" "ksrpc/_version.py" | head -n1 || true)"
             if [[ -z "${raw_version}" ]]; then
-              echo "OCI_RELEASE_VERSION is empty and failed to read __version__ from ksrpc/_version.py."
+              raw_version="$(python3 -c "import json,urllib.request; data=json.load(urllib.request.urlopen('https://pypi.org/pypi/ksrpc/json', timeout=15)); print((data.get('info') or {}).get('version',''))" 2>/dev/null || true)"
+            fi
+            if [[ -z "${raw_version}" ]]; then
+              echo "OCI_RELEASE_VERSION is empty and failed to resolve ksrpc version from repository or PyPI."
               exit 1
             fi
           fi

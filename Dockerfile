@@ -11,16 +11,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     CONFIG=""
 
-ARG KSRPC_PIP_PACKAGE=.
+ARG KSRPC_PIP_PACKAGE=ksrpc
 ARG PIP_EXTRA_INDEX_URL=
 ARG PIP_TRUSTED_HOST=
 
-COPY . /app
+COPY gunicorn.conf.py /app/gunicorn.conf.py
+COPY ksrpc.conf.py /app/ksrpc.conf.py
 
 RUN --mount=type=secret,id=ksrpc_pip_conf,target=/etc/pip.conf,required=false \
     set -eu \
-    && PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL}" PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST}" pip install --no-cache-dir "${KSRPC_PIP_PACKAGE}" \
-    && if [ "${KSRPC_PIP_PACKAGE}" != "." ]; then rm -rf /app/ksrpc; fi
+    && PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL}" PIP_TRUSTED_HOST="${PIP_TRUSTED_HOST}" pip install --no-cache-dir "${KSRPC_PIP_PACKAGE}"
 
 EXPOSE 8080
 
