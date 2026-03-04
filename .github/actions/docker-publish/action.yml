@@ -275,6 +275,8 @@ runs:
         PYPI_PACKAGE_NAME: ${{ inputs.PYPI_PACKAGE_NAME }}
         PYPI_SIMPLE_URL: ${{ inputs.PYPI_SIMPLE_URL }}
         PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
+        NEXUS_USERNAME: ${{ inputs.nexus_username }}
+        NEXUS_PASSWORD: ${{ inputs.nexus_password }}
         WHEEL_VERSION: ${{ steps.wheel.outputs.wheel_version }}
       run: |
         set -euo pipefail
@@ -290,8 +292,30 @@ runs:
               echo "wheel version is empty while PYPI_UPLOAD_WHEEL=true" >&2
               exit 1
             fi
+            auth_pypi_simple_url="$(
+              python3 - <<'PY'
+              import os
+              from urllib.parse import quote, urlsplit, urlunsplit
+
+              url = os.environ["PYPI_SIMPLE_URL"]
+              username = os.environ.get("NEXUS_USERNAME", "")
+              password = os.environ.get("NEXUS_PASSWORD", "")
+
+              if not username or not password:
+                  print(url)
+                  raise SystemExit(0)
+
+              parts = urlsplit(url)
+              user = quote(username, safe="")
+              pwd = quote(password, safe="")
+              host = parts.hostname or ""
+              port = f":{parts.port}" if parts.port else ""
+              netloc = f"{user}:{pwd}@{host}{port}"
+              print(urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)))
+              PY
+            )"
             echo "KSRPC_PIP_PACKAGE=${PYPI_PACKAGE_NAME}==${WHEEL_VERSION}"
-            echo "PIP_INDEX_URL=${PYPI_SIMPLE_URL}"
+            echo "PIP_INDEX_URL=${auth_pypi_simple_url}"
             if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
               echo "PIP_TRUSTED_HOST=${PYPI_TRUSTED_HOST}"
             fi
