@@ -234,7 +234,19 @@ runs:
           exit 1
         fi
 
-        python3 -m twine upload --non-interactive --skip-existing --repository-url "${PYPI_REPOSITORY_URL}" "${wheel_file}"
+        upload_log="$(mktemp)"
+        set +e
+        python3 -m twine upload --non-interactive --repository-url "${PYPI_REPOSITORY_URL}" "${wheel_file}" >"${upload_log}" 2>&1
+        upload_rc=$?
+        set -e
+        if [[ "${upload_rc}" -ne 0 ]]; then
+          if grep -Eiq "(already exists|File already exists|409 Conflict|400 Bad Request)" "${upload_log}"; then
+            echo "wheel already exists in repository, continue."
+          else
+            cat "${upload_log}" >&2
+            exit "${upload_rc}"
+          fi
+        fi
 
         install_cmd="pip install --index-url ${PYPI_SIMPLE_URL}"
         if [[ -n "${PYPI_TRUSTED_HOST}" ]]; then
