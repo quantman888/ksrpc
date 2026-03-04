@@ -13,11 +13,23 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  runner_probe:
+    name: CI Check / Runner Probe
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@main
+    with:
+      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
+      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
+      RUNNER_FALLBACK_POLICY: github-hosted
+    secrets:
+      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
+
   test:
     name: CI Check / Test
-    runs-on: ubuntu-latest
+    needs: [runner_probe]
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
     timeout-minutes: 20
     steps:
       - name: Checkout
