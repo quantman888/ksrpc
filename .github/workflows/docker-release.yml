@@ -17,6 +17,16 @@ on:
         required: false
         type: boolean
         default: true
+      OCI_PUBLISH_RELEASE_ASSETS:
+        description: "Publish GitHub release assets"
+        required: false
+        type: boolean
+        default: false
+      OCI_RELEASE_ASSETS_GLOB:
+        description: "Comma-separated glob patterns for release assets (required when OCI_PUBLISH_RELEASE_ASSETS=true)"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: docker-promote-${{ vars.NEXUS_REGISTRY }}-${{ vars.IMAGE_NAME }}
@@ -69,6 +79,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     timeout-minutes: 30
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
@@ -89,6 +101,8 @@ jobs:
           INPUT_OCI_RELEASE_VERSION: ${{ github.event.inputs.OCI_RELEASE_VERSION }}
           INPUT_OCI_SOURCE_TAG: ${{ github.event.inputs.OCI_SOURCE_TAG }}
           INPUT_OCI_PUBLISH_LATEST: ${{ github.event.inputs.OCI_PUBLISH_LATEST }}
+          INPUT_OCI_PUBLISH_RELEASE_ASSETS: ${{ github.event.inputs.OCI_PUBLISH_RELEASE_ASSETS }}
+          INPUT_OCI_RELEASE_ASSETS_GLOB: ${{ github.event.inputs.OCI_RELEASE_ASSETS_GLOB }}
           OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
           OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
         run: |
@@ -96,7 +110,18 @@ jobs:
 
           raw_version="${INPUT_OCI_RELEASE_VERSION:-}"
           publish_latest="${INPUT_OCI_PUBLISH_LATEST:-true}"
+          publish_release_assets="${INPUT_OCI_PUBLISH_RELEASE_ASSETS:-false}"
+          release_assets_glob="${INPUT_OCI_RELEASE_ASSETS_GLOB:-}"
           source_tag="${INPUT_OCI_SOURCE_TAG:-edge}"
+
+          case "${publish_release_assets}" in
+            true|false)
+              ;;
+            *)
+              echo "invalid OCI_PUBLISH_RELEASE_ASSETS: ${publish_release_assets} (allowed: true|false)"
+              exit 1
+              ;;
+          esac
 
           if [[ -z "${raw_version}" ]]; then
             if [[ ! -f "ksrpc/_version.py" ]]; then
@@ -122,6 +147,10 @@ jobs:
           fi
           if [[ -z "${source_tag}" ]]; then
             echo "OCI_SOURCE_TAG is required."
+            exit 1
+          fi
+          if [[ "${publish_release_assets}" == "true" && -z "${release_assets_glob//[[:space:]]/}" ]]; then
+            echo "OCI_RELEASE_ASSETS_GLOB is required when OCI_PUBLISH_RELEASE_ASSETS=true."
             exit 1
           fi
 
@@ -156,6 +185,8 @@ jobs:
             echo "OCI_SOURCE_TAG=${source_tag}"
             echo "OCI_SOURCE_REF=${source_ref}"
             echo "OCI_VERSION=${version}"
+            echo "OCI_PUBLISH_RELEASE_ASSETS=${publish_release_assets}"
+            echo "OCI_RELEASE_ASSETS_GLOB=${release_assets_glob}"
             echo "OCI_TAGS<<EOF"
             printf '%s\n' "${tags[@]}"
             echo "EOF"
@@ -177,8 +208,84 @@ jobs:
             docker buildx imagetools create --tag "${target_ref}" "${OCI_IMAGE_REF}@${OCI_DIGEST}"
           done <<< "${OCI_TAGS}"
 
+      - name: Checkout repository for release assets
+        if: ${{ steps.resolve.outputs.OCI_PUBLISH_RELEASE_ASSETS == 'true' }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve release asset files
+        id: release_assets
+        if: ${{ steps.resolve.outputs.OCI_PUBLISH_RELEASE_ASSETS == 'true' }}
+        env:
+          OCI_RELEASE_ASSETS_GLOB: ${{ steps.resolve.outputs.OCI_RELEASE_ASSETS_GLOB }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+
+          raw_globs="${OCI_RELEASE_ASSETS_GLOB:-}"
+          normalized_globs="$(printf '%s' "${raw_globs}" | tr '\n' ',')"
+          IFS=',' read -r -a patterns <<< "${normalized_globs}"
+
+          declare -a files=()
+          declare -A seen=()
+          for pattern in "${patterns[@]}"; do
+            pattern="$(printf '%s' "${pattern}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+            if [[ -z "${pattern}" ]]; then
+              continue
+            fi
+
+            while IFS= read -r file; do
+              if [[ -z "${file}" ]]; then
+                continue
+              fi
+              if [[ -z "${seen["${file}"]+x}" ]]; then
+                files+=("${file}")
+                seen["${file}"]=1
+              fi
+            done < <(compgen -G "${pattern}" || true)
+          done
+
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No files matched OCI_RELEASE_ASSETS_GLOB: ${raw_globs}"
+            exit 1
+          fi
+
+          {
+            echo "files<<EOF"
+            printf '%s\n' "${files[@]}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Publish GitHub release assets
+        if: ${{ steps.resolve.outputs.OCI_PUBLISH_RELEASE_ASSETS == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OCI_VERSION: ${{ steps.resolve.outputs.OCI_VERSION }}
+          RELEASE_ASSET_FILES: ${{ steps.release_assets.outputs.files }}
+        run: |
+          set -euo pipefail
+          release_tag="v${OCI_VERSION}"
+          release_title="ksrpc ${OCI_VERSION}"
+
+          mapfile -t files < <(printf '%s\n' "${RELEASE_ASSET_FILES}" | sed '/^[[:space:]]*$/d')
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No release assets resolved."
+            exit 1
+          fi
+
+          if gh release view "${release_tag}" >/dev/null 2>&1; then
+            gh release upload "${release_tag}" "${files[@]}" --clobber
+          else
+            gh release create "${release_tag}" "${files[@]}" \
+              --title "${release_title}" \
+              --notes "Docker image release ${OCI_VERSION}."
+          fi
+
       - name: Promotion summary
         if: ${{ always() }}
+        env:
+          OCI_PUBLISH_RELEASE_ASSETS: ${{ steps.resolve.outputs.OCI_PUBLISH_RELEASE_ASSETS }}
+          OCI_VERSION: ${{ steps.resolve.outputs.OCI_VERSION }}
+          OCI_RELEASE_ASSET_FILES: ${{ steps.release_assets.outputs.files }}
         run: |
           {
             echo "### Docker Promote Summary"
@@ -192,4 +299,14 @@ jobs:
               fi
             done <<< "${{ steps.resolve.outputs.OCI_TAGS }}"
             echo "- source digest: \`${{ steps.resolve.outputs.OCI_DIGEST }}\`"
+            echo "- publish release assets: \`${OCI_PUBLISH_RELEASE_ASSETS:-false}\`"
+            if [[ "${OCI_PUBLISH_RELEASE_ASSETS:-false}" == "true" ]]; then
+              echo "- github release tag: \`v${OCI_VERSION}\`"
+              echo "- release assets:"
+              while IFS= read -r file; do
+                if [[ -n "${file}" ]]; then
+                  echo "  - \`${file}\`"
+                fi
+              done <<< "${OCI_RELEASE_ASSET_FILES}"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
