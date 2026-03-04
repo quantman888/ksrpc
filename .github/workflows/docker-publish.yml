@@ -38,6 +38,9 @@ jobs:
       wheel_file: ${{ steps.publish.outputs.wheel_file }}
       wheel_version: ${{ steps.publish.outputs.wheel_version }}
       wheel_install_cmd: ${{ steps.publish.outputs.wheel_install_cmd }}
+      upstream_package_spec: ${{ steps.publish_mode.outputs.upstream_package_spec }}
+      upstream_package_version: ${{ steps.publish_mode.outputs.upstream_package_version }}
+      upstream_install_cmd: ${{ steps.publish_mode.outputs.upstream_install_cmd }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -46,23 +49,44 @@ jobs:
         shell: bash
         env:
           BASE_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
+          NEXUS_PYPI_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL }}
+          NEXUS_PYPI_TRUSTED_HOST: ${{ vars.NEXUS_PYPI_TRUSTED_HOST }}
         run: |
           set -euo pipefail
 
           ref="${GITHUB_REF}"
           pypi_upload_wheel="false"
           build_args="${BASE_BUILD_ARGS:-}"
+          upstream_package_spec=""
+          upstream_package_version=""
+          upstream_install_cmd=""
 
           case "${ref}" in
             refs/heads/docker)
               pypi_upload_wheel="true"
               ;;
             refs/heads/docker-stable)
+              upstream_package_version="$(python3 -c "import json,urllib.request; data=json.load(urllib.request.urlopen('https://pypi.org/pypi/ksrpc/json', timeout=15)); print((data.get('info') or {}).get('version',''))" 2>/dev/null || true)"
+              if [[ -z "${upstream_package_version}" ]]; then
+                echo "failed to resolve latest ksrpc version from PyPI" >&2
+                exit 1
+              fi
+              upstream_package_spec="ksrpc==${upstream_package_version}"
               build_args="$(printf '%s\n' "${build_args}" | sed '/^[[:space:]]*$/d' | grep -Eiv '^[[:space:]]*KSRPC_PIP_PACKAGE=' || true)"
               if [[ -n "${build_args}" ]]; then
                 build_args="${build_args}"$'\n'
               fi
-              build_args="${build_args}KSRPC_PIP_PACKAGE=ksrpc"
+              build_args="${build_args}KSRPC_PIP_PACKAGE=${upstream_package_spec}"
+
+              if [[ -n "${NEXUS_PYPI_SIMPLE_URL:-}" ]]; then
+                upstream_install_cmd="pip install --index-url ${NEXUS_PYPI_SIMPLE_URL}"
+                if [[ -n "${NEXUS_PYPI_TRUSTED_HOST:-}" ]]; then
+                  upstream_install_cmd="${upstream_install_cmd} --trusted-host ${NEXUS_PYPI_TRUSTED_HOST}"
+                fi
+              else
+                upstream_install_cmd="pip install"
+              fi
+              upstream_install_cmd="${upstream_install_cmd} ${upstream_package_spec}"
               ;;
             *)
               echo "unsupported branch: ${ref}" >&2
@@ -72,6 +96,9 @@ jobs:
 
           {
             echo "pypi_upload_wheel=${pypi_upload_wheel}"
+            echo "upstream_package_spec=${upstream_package_spec}"
+            echo "upstream_package_version=${upstream_package_version}"
+            echo "upstream_install_cmd=${upstream_install_cmd}"
             echo "oci_build_args<<EOF"
             if [[ -n "${build_args}" ]]; then
               printf '%s\n' "${build_args}"
@@ -115,6 +142,9 @@ jobs:
       PYPI_WHEEL_FILE: ${{ needs.publish_edge.outputs.wheel_file }}
       PYPI_WHEEL_VERSION: ${{ needs.publish_edge.outputs.wheel_version }}
       PYPI_INSTALL_CMD: ${{ needs.publish_edge.outputs.wheel_install_cmd }}
+      KSRPC_UPSTREAM_PACKAGE_SPEC: ${{ needs.publish_edge.outputs.upstream_package_spec }}
+      KSRPC_UPSTREAM_VERSION: ${{ needs.publish_edge.outputs.upstream_package_version }}
+      KSRPC_UPSTREAM_INSTALL_CMD: ${{ needs.publish_edge.outputs.upstream_install_cmd }}
     steps:
       - name: Resolve summary outputs
         id: summary
@@ -126,6 +156,9 @@ jobs:
           PYPI_WHEEL_FILE="${{ needs.publish_edge.outputs.wheel_file }}"
           PYPI_WHEEL_VERSION="${{ needs.publish_edge.outputs.wheel_version }}"
           PYPI_INSTALL_CMD="${{ needs.publish_edge.outputs.wheel_install_cmd }}"
+          KSRPC_UPSTREAM_PACKAGE_SPEC="${{ needs.publish_edge.outputs.upstream_package_spec }}"
+          KSRPC_UPSTREAM_VERSION="${{ needs.publish_edge.outputs.upstream_package_version }}"
+          KSRPC_UPSTREAM_INSTALL_CMD="${{ needs.publish_edge.outputs.upstream_install_cmd }}"
 
           {
             echo "OCI_IMAGE_WITH_DIGEST=${OCI_IMAGE_WITH_DIGEST}"
@@ -135,11 +168,17 @@ jobs:
             echo "PYPI_WHEEL_FILE=${PYPI_WHEEL_FILE}"
             echo "PYPI_WHEEL_VERSION=${PYPI_WHEEL_VERSION}"
             echo "PYPI_INSTALL_CMD=${PYPI_INSTALL_CMD}"
+            echo "KSRPC_UPSTREAM_PACKAGE_SPEC=${KSRPC_UPSTREAM_PACKAGE_SPEC}"
+            echo "KSRPC_UPSTREAM_VERSION=${KSRPC_UPSTREAM_VERSION}"
+            echo "KSRPC_UPSTREAM_INSTALL_CMD=${KSRPC_UPSTREAM_INSTALL_CMD}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Show reusable workflow outputs
         run: |
           PYPI_INSTALL_CMD="${{ steps.summary.outputs.PYPI_INSTALL_CMD }}"
+          KSRPC_UPSTREAM_VERSION="${{ steps.summary.outputs.KSRPC_UPSTREAM_VERSION }}"
+          KSRPC_UPSTREAM_PACKAGE_SPEC="${{ steps.summary.outputs.KSRPC_UPSTREAM_PACKAGE_SPEC }}"
+          KSRPC_UPSTREAM_INSTALL_CMD="${{ steps.summary.outputs.KSRPC_UPSTREAM_INSTALL_CMD }}"
           {
             echo "### Docker Publish Summary"
             echo ""
@@ -151,5 +190,14 @@ jobs:
             echo "- PYPI_WHEEL_VERSION: \`${{ steps.summary.outputs.PYPI_WHEEL_VERSION }}\`"
             if [[ -n "${PYPI_INSTALL_CMD}" ]]; then
               echo "- PYPI_INSTALL_CMD: \`${PYPI_INSTALL_CMD}\`"
+            fi
+            if [[ -n "${KSRPC_UPSTREAM_VERSION}" ]]; then
+              echo "- KSRPC_UPSTREAM_VERSION: \`${KSRPC_UPSTREAM_VERSION}\`"
+            fi
+            if [[ -n "${KSRPC_UPSTREAM_PACKAGE_SPEC}" ]]; then
+              echo "- KSRPC_UPSTREAM_PACKAGE_SPEC: \`${KSRPC_UPSTREAM_PACKAGE_SPEC}\`"
+            fi
+            if [[ -n "${KSRPC_UPSTREAM_INSTALL_CMD}" ]]; then
+              echo "- KSRPC_UPSTREAM_INSTALL_CMD: \`${KSRPC_UPSTREAM_INSTALL_CMD}\`"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
