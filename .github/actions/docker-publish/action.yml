@@ -205,6 +205,7 @@ runs:
         PYPI_TRUSTED_HOST: ${{ inputs.PYPI_TRUSTED_HOST }}
         TWINE_USERNAME: ${{ inputs.nexus_username }}
         TWINE_PASSWORD: ${{ inputs.nexus_password }}
+        GITHUB_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
 
@@ -220,6 +221,23 @@ runs:
         tool_venv="$(mktemp -d)/pypi-tools-venv"
         python3 -m venv "${tool_venv}"
         "${tool_venv}/bin/python" -m pip install --upgrade pip build twine "pkginfo>=1.12.0"
+
+        version_file="ksrpc/_version.py"
+        base_version="$(
+          "${tool_venv}/bin/python" -c 'import pathlib,re,sys; text=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"); m=re.search(r"__version__\s*=\s*[\"'\"'\"']([^\"'\"'\"']+)[\"'\"'\"']", text); print(m.group(1) if m else "")' "${version_file}"
+        )"
+        if [[ -z "${base_version}" ]]; then
+          echo "failed to read base version from ${version_file}" >&2
+          exit 1
+        fi
+        short_sha="${GITHUB_SHA:0:12}"
+        build_stamp="$(date -u +%Y%m%d%H%M%S)"
+        dev_version="$(
+          "${tool_venv}/bin/python" -c 'import re,sys; base=sys.argv[1]; stamp=sys.argv[2]; sha=sys.argv[3]; base=re.sub(r"\+.*$","",base); base=re.sub(r"\.dev\d+$","",base); print(f"{base}.dev{stamp}+g{sha}")' "${base_version}" "${build_stamp}" "${short_sha}"
+        )"
+        DEV_VERSION="${dev_version}" "${tool_venv}/bin/python" -c 'import os,pathlib,re,sys; p=pathlib.Path(sys.argv[1]); text=p.read_text(encoding="utf-8"); v=os.environ["DEV_VERSION"]; new,n=re.subn(r"__version__\s*=\s*[\"'\"'\"'][^\"'\"'\"']+[\"'\"'\"']", f"__version__ = \"{v}\"", text, count=1); assert n==1, "rewrite __version__ failed"; p.write_text(new, encoding="utf-8")' "${version_file}"
+        echo "generated wheel version: ${dev_version}"
+
         rm -rf dist
         "${tool_venv}/bin/python" -m build --wheel --outdir dist
 
@@ -229,9 +247,7 @@ runs:
           exit 1
         fi
         wheel_base="$(basename "${wheel_file}")"
-        wheel_version="$(
-          python3 -c 'import re,sys; w=sys.argv[1]; m=re.match(r"^[^-]+-([^-]+)-", w); print(m.group(1) if m else "")' "${wheel_base}"
-        )"
+        wheel_version="$("${tool_venv}/bin/python" -c 'import pkginfo,sys; print(pkginfo.Wheel(sys.argv[1]).version or "")' "${wheel_file}")"
         if [[ -z "${wheel_version}" ]]; then
           echo "failed to parse wheel version from ${wheel_base}" >&2
           exit 1
