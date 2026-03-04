@@ -23,6 +23,8 @@ jobs:
     name: Branch Sync / Open PR
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     uses: ./.github/workflows/branch-sync-pr.reusable.yml
+    secrets:
+      RUNNER_PROBE_TOKEN: ${{ secrets.RUNNER_PROBE_TOKEN }}
     with:
       source_branch: main
       target_branch: docker
