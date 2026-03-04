@@ -36,6 +36,9 @@ on:
       pr_url:
         description: "Existing or newly created PR URL"
         value: ${{ jobs.open_branch_pr.outputs.pr_url }}
+    secrets:
+      RUNNER_PROBE_TOKEN:
+        required: false
 
 permissions:
   contents: read
