@@ -41,12 +41,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Require docker branch for manual release
+      - name: Require docker-stable branch for manual release
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF}" != "refs/heads/docker" ]]; then
-            echo "::error::Manual release is allowed only on refs/heads/docker. Current ref: ${GITHUB_REF}"
+          if [[ "${GITHUB_REF}" != "refs/heads/docker-stable" ]]; then
+            echo "::error::Manual release is allowed only on refs/heads/docker-stable. Current ref: ${GITHUB_REF}"
             exit 1
           fi
       - name: Checkout

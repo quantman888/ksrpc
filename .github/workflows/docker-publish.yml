@@ -15,19 +15,19 @@ jobs:
     name: Docker Publish / Branch Guard
     runs-on: ubuntu-latest
     steps:
-      - name: Require docker branch for manual publish
+      - name: Require docker or docker-stable branch for manual publish
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF}" != "refs/heads/docker" ]]; then
-            echo "::error::Manual publish is allowed only on refs/heads/docker. Current ref: ${GITHUB_REF}"
+          if [[ "${GITHUB_REF}" != "refs/heads/docker" && "${GITHUB_REF}" != "refs/heads/docker-stable" ]]; then
+            echo "::error::Manual publish is allowed only on refs/heads/docker or refs/heads/docker-stable. Current ref: ${GITHUB_REF}"
             exit 1
           fi
 
   publish_edge:
     name: Docker Publish / Edge
     needs: [guard_branch]
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     outputs:
@@ -41,6 +41,43 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Resolve publish mode by branch
+        id: publish_mode
+        shell: bash
+        env:
+          BASE_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
+        run: |
+          set -euo pipefail
+
+          ref="${GITHUB_REF}"
+          pypi_upload_wheel="false"
+          build_args="${BASE_BUILD_ARGS:-}"
+
+          case "${ref}" in
+            refs/heads/docker)
+              pypi_upload_wheel="true"
+              ;;
+            refs/heads/docker-stable)
+              build_args="$(printf '%s\n' "${build_args}" | sed '/^[[:space:]]*$/d' | grep -Eiv '^[[:space:]]*KSRPC_PIP_PACKAGE=' || true)"
+              if [[ -n "${build_args}" ]]; then
+                build_args="${build_args}"$'\n'
+              fi
+              build_args="${build_args}KSRPC_PIP_PACKAGE=ksrpc"
+              ;;
+            *)
+              echo "unsupported branch: ${ref}" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "pypi_upload_wheel=${pypi_upload_wheel}"
+            echo "oci_build_args<<EOF"
+            if [[ -n "${build_args}" ]]; then
+              printf '%s\n' "${build_args}"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
       - name: Publish image
         id: publish
         uses: ./.github/actions/docker-publish
@@ -50,13 +87,13 @@ jobs:
           OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH }}
           OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT }}
           OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS }}
-          OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS }}
+          OCI_BUILD_ARGS: ${{ steps.publish_mode.outputs.oci_build_args }}
           OCI_PUSH_IMAGE: 'true'
           OCI_PUBLISH_CHANNEL: edge
           OCI_GATE_VULN_SEVERITY: CRITICAL
           OCI_GATE_VULN_IGNORE_UNFIXED: 'true'
           OCI_PUBLISH_LATEST: 'false'
-          PYPI_UPLOAD_WHEEL: 'true'
+          PYPI_UPLOAD_WHEEL: ${{ steps.publish_mode.outputs.pypi_upload_wheel }}
           PYPI_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL }}
           PYPI_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL }}
           PYPI_PACKAGE_NAME: ksrpc
