@@ -8,10 +8,10 @@ on:
         required: false
         type: string
       OCI_SOURCE_TAG:
-        description: "Source tag to promote from"
+        description: "Source tag to promote from (leave blank to use current commit sha-<12>)"
         required: false
         type: string
-        default: edge
+        default: ""
       OCI_PUBLISH_LATEST:
         description: "Also promote latest tag"
         required: false
@@ -106,6 +106,7 @@ jobs:
           INPUT_OCI_PUBLISH_LATEST: ${{ github.event.inputs.OCI_PUBLISH_LATEST }}
           INPUT_OCI_PUBLISH_RELEASE_ASSETS: ${{ github.event.inputs.OCI_PUBLISH_RELEASE_ASSETS }}
           INPUT_OCI_RELEASE_ASSETS_GLOB: ${{ github.event.inputs.OCI_RELEASE_ASSETS_GLOB }}
+          GITHUB_SHA: ${{ github.sha }}
           OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
           OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
         run: |
@@ -115,7 +116,12 @@ jobs:
           publish_latest="${INPUT_OCI_PUBLISH_LATEST:-true}"
           publish_release_assets="${INPUT_OCI_PUBLISH_RELEASE_ASSETS:-false}"
           release_assets_glob="${INPUT_OCI_RELEASE_ASSETS_GLOB:-}"
-          source_tag="${INPUT_OCI_SOURCE_TAG:-edge}"
+          input_source_tag="${INPUT_OCI_SOURCE_TAG:-}"
+          if [[ -n "${input_source_tag//[[:space:]]/}" ]]; then
+            source_tag="${input_source_tag}"
+          else
+            source_tag="sha-${GITHUB_SHA:0:12}"
+          fi
 
           case "${publish_release_assets}" in
             true|false)
