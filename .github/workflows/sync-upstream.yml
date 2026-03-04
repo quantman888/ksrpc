@@ -12,6 +12,7 @@ concurrency:
 jobs:
   sync:
     uses: ./.github/workflows/fork-sync.reusable.yml
+    secrets: inherit
     with:
       target_branch: main
       upstream_repo: wukan1986/ksrpc
