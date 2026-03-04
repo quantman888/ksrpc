@@ -281,6 +281,11 @@ runs:
       run: |
         set -euo pipefail
 
+        if [[ "${PYPI_UPLOAD_WHEEL}" == "true" && -z "${WHEEL_VERSION}" ]]; then
+          echo "wheel version is empty while PYPI_UPLOAD_WHEEL=true" >&2
+          exit 1
+        fi
+
         {
           echo "build_args<<EOF"
           if [[ -n "${OCI_BUILD_ARGS}" ]]; then
@@ -288,12 +293,8 @@ runs:
           fi
 
           if [[ "${PYPI_UPLOAD_WHEEL}" == "true" ]]; then
-            if [[ -z "${WHEEL_VERSION}" ]]; then
-              echo "wheel version is empty while PYPI_UPLOAD_WHEEL=true" >&2
-              exit 1
-            fi
             auth_pypi_simple_url="$(
-              python3 -c 'import os, urllib.parse as u; url=os.environ["PYPI_SIMPLE_URL"]; user=os.environ.get("NEXUS_USERNAME",""); pwd=os.environ.get("NEXUS_PASSWORD",""); parts=u.urlsplit(url); host=parts.hostname or ""; port=f":{parts.port}" if parts.port else ""; netloc=(f"{u.quote(user, safe=\"\")}:{u.quote(pwd, safe=\"\")}@{host}{port}" if user and pwd else parts.netloc); print(u.urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)))'
+              python3 -c "import os, urllib.parse as u; url=os.environ['PYPI_SIMPLE_URL']; user=os.environ.get('NEXUS_USERNAME',''); pwd=os.environ.get('NEXUS_PASSWORD',''); parts=u.urlsplit(url); host=parts.hostname or ''; port=f':{parts.port}' if parts.port else ''; netloc=(u.quote(user, safe='') + ':' + u.quote(pwd, safe='') + '@' + host + port if user and pwd else parts.netloc); print(u.urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment)))"
             )"
             echo "KSRPC_PIP_PACKAGE=${PYPI_PACKAGE_NAME}==${WHEEL_VERSION}"
             echo "PIP_INDEX_URL=${auth_pypi_simple_url}"
