@@ -39,75 +39,6 @@ pip install ksrpc -i https://mirrors.aliyun.com/pypi/simple --upgrade
 pip install ksrpc -i https://pypi.org/simple --upgrade
 ```
 
-### 从 Nexus 安装（内部仓库）
-
-```bash
-# 最新版本
-pip install --index-url "https://你的nexus域名/repository/pypi-hosted/simple" \
-  --trusted-host "你的nexus域名" \
-  --upgrade ksrpc
-
-# 指定版本（推荐与 Docker Publish Summary 的 PYPI_WHEEL_VERSION 对齐）
-pip install --index-url "https://你的nexus域名/repository/pypi-hosted/simple" \
-  --trusted-host "你的nexus域名" \
-  --upgrade "ksrpc==0.7.0"
-```
-
-## Docker 部署（docker 分支）
-
-1. 准备环境变量与外部配置模板
-
-```bash
-cp .env.example .env
-```
-
-2. 编辑 `.env`（重点参数）
-
-```bash
-OCI_IMAGE_REF=你的镜像地址/ksrpc:tag
-TUSHARE_TOKEN=你的tushare_token
-KSRPC_BASIC_USER=admin
-KSRPC_BASIC_PASSWORD=强密码
-```
-
-3. 需要多账号时可选配置
-
-```bash
-# 示例：覆盖单账号模式（留空 KSRPC_BASIC_USER/KSRPC_BASIC_PASSWORD）
-KSRPC_BASIC_CREDENTIALS_JSON={"admin":"xxx","viewer":"yyy"}
-```
-
-4. 按需调整文件缓存
-
-```bash
-KSRPC_CACHE_ENABLE=true
-KSRPC_CACHE_TIMEOUT_JSON={"ksrpc.server.tushare.daily":30,"ksrpc.server.tushare.*":60,"*":600}
-```
-
-5. 启动或重建
-
-```bash
-docker compose pull
-docker compose up -d --remove-orphans
-```
-
-6. 查看状态
-
-```bash
-docker compose ps
-docker compose logs -f --tail=100
-```
-
-说明：
-
-- `docker-compose.yml` 通过 `restart: always` 做容器级守护，`command` 固定为 `python -u -m gunicorn -c /etc/ksrpc/gunicorn.conf.py ksrpc.run_gunicorn:web_app`。
-- `docker-compose.yml` 使用 `env_file: .env` 注入环境变量，并在 compose `environment` 中固定 `CONFIG=/etc/ksrpc/ksrpc.conf.py`。
-- Gunicorn 配置文件通过 `.env` 中 `KSRPC_GUNICORN_CONFIG_PATH` 按文件路径挂载到容器 `/etc/ksrpc/gunicorn.conf.py`。
-- ksrpc 配置文件通过 `.env` 中 `KSRPC_CONFIG_PATH` 按文件路径挂载到容器 `/etc/ksrpc/ksrpc.conf.py`。
-- Docker 启动链固定通过 `CONFIG=/etc/ksrpc/ksrpc.conf.py` 加载外部配置，对应宿主机 `${KSRPC_CONFIG_PATH}`（默认 `./ksrpc.conf.py`）。
-- 缓存目录默认挂载为 `${KSRPC_CACHE_HOST_PATH:-./data/cache}:${KSRPC_CACHE_PATH:-/opt/ksrpc/cache}`。
-- 端口映射默认 `${KSRPC_HOST_PORT}:${KSRPC_PORT}`，例如 `19991:8080`。
-
 ## 使用
 
 1. 服务端
@@ -115,18 +46,11 @@ docker compose logs -f --tail=100
 ```bash
 # 直接运行
 python -m ksrpc.run_app
-# 使用配置运行，注意&前不要有空格
-set CONFIG=config.py& python -m ksrpc.run_app # windows
-CONFIG=config.py python -m ksrpc.run_app # linux
-# 使用 gunicorn.conf.py 集中管理 bind/workers/timeout/worker_class
-set CONFIG=config.py& gunicorn -c gunicorn.conf.py ksrpc.run_gunicorn:web_app # windows
-CONFIG=config.py gunicorn -c gunicorn.conf.py ksrpc.run_gunicorn:web_app # linux
+# 使用配置运行，注意&前一定不要有空格
+set CONFIG_SERVER=config_server.py&python -m ksrpc.run_app # windows
+CONFIG_SERVER=config_server.py python -m ksrpc.run_app # linux
+CONFIG_SERVER=config_server.py gunicorn ksrpc.run_gunicorn:web_app --bind 0.0.0.0:8080 --worker-class aiohttp.GunicornWebWorker # linux
 ```
-
-说明：
-
-- `aiohttp` 应用默认 `worker_class` 推荐 `aiohttp.GunicornWebWorker`。
-- 生产部署建议通过 `.env` 的 `KSRPC_GUNICORN_*` 变量调优 `workers`、`keepalive`、`timeout`。
 
 2. 异步客户端（推荐）
 
@@ -134,8 +58,7 @@ CONFIG=config.py gunicorn -c gunicorn.conf.py ksrpc.run_gunicorn:web_app # linux
 import asyncio
 
 from ksrpc.client import RpcClient
-from ksrpc.connections.http import HttpConnection  # noqa
-from ksrpc.connections.websocket import WebSocketConnection  # noqa
+from ksrpc.connections import SmartConnection
 
 # 动态URL
 URL = 'http://127.0.0.1:8080/api/v1'
@@ -144,9 +67,9 @@ PASSWORD = 'password123'
 
 
 async def async_main():
-    async with HttpConnection(URL, username=USERNAME, password=PASSWORD) as conn:
-        demo = RpcClient('ksrpc.server.demo', conn)
-        print(await demo.test())
+   async with SmartConnection(URL, username=USERNAME, password=PASSWORD) as conn:
+      demo = RpcClient('ksrpc.server.demo', conn)
+      print(await demo.test())
 
 
 asyncio.run(async_main())
@@ -171,17 +94,17 @@ nest_asyncio.apply()
 
 
 def sync_main():
-    with HttpConnection(URL, username=USERNAME, password=PASSWORD) as conn:
-        demo = RpcClient('ksrpc.server.demo', conn, to_sync=True)
-        print(demo.test())
-
-    conn = WebSocketConnection(URL, username=USERNAME, password=PASSWORD)
-    demo = RpcClient('ksrpc.server.demo', conn, to_sync=True)
-    print(demo.test())
-    print(demo.test())
+   with HttpConnection(URL, username=USERNAME, password=PASSWORD) as conn:
+      demo = RpcClient('ksrpc.server.demo', conn, to_sync=True)
+      print(demo.test())
 
 
 sync_main()
+
+conn = WebSocketConnection(URL, username=USERNAME, password=PASSWORD)
+demo = RpcClient('ksrpc.server.demo', conn, to_sync=True)
+print(demo.test())
+print(demo.test())
 ```
 
 ## 远程调用规则
