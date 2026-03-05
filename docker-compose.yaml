@@ -11,7 +11,7 @@ services:
     volumes:
       - "${KSRPC_GUNICORN_CONFIG_PATH:-./gunicorn.conf.py}:/etc/ksrpc/gunicorn.conf.py:ro"
       - "${KSRPC_CONFIG_PATH:-./ksrpc.conf.py}:/etc/ksrpc/ksrpc.conf.py:ro"
-      - "${KSRPC_CACHE_PATH:-./data/cache}:/opt/ksrpc/cache"
+      - "${KSRPC_CACHE_HOST_PATH:-./data/cache}:${KSRPC_CACHE_PATH:-/opt/ksrpc/cache}"
     ports:
       - "${KSRPC_HOST_PORT}:${KSRPC_PORT}"
     healthcheck:
