@@ -67,7 +67,7 @@ IMPORT_RULES = _env_json_dict(
 
 
 # File cache config
-CACHE_ENABLE = _env_bool("KSRPC_CACHE_ENABLE", True)
+CACHE_ENABLE = _env_bool("KSRPC_CACHE_ENABLE", False)
 CACHE_PATH = os.getenv("KSRPC_CACHE_PATH", "/opt/ksrpc/cache")
 CACHE_TIMEOUT = {}
 for key, value in _env_json_dict(
