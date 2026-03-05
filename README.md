@@ -138,7 +138,7 @@ from ksrpc.connections.http import HttpConnection  # noqa
 from ksrpc.connections.websocket import WebSocketConnection  # noqa
 
 # 动态URL
-URL = 'http://127.0.0.1:8080/api/v1/{time}'
+URL = 'http://127.0.0.1:8080/api/v1'
 USERNAME = 'admin'
 PASSWORD = 'password123'
 
@@ -162,7 +162,7 @@ from ksrpc.connections.http import HttpConnection  # noqa
 from ksrpc.connections.websocket import WebSocketConnection  # noqa
 
 # 动态URL
-URL = 'http://127.0.0.1:8080/api/v1/{time}'
+URL = 'http://127.0.0.1:8080/api/v1'
 USERNAME = 'admin'
 PASSWORD = 'password123'
 
@@ -278,17 +278,15 @@ Docker Compose 场景补充：
 1. 先整体`zlib`压缩，然后分`chunk`传输
     - 由于整体压缩，所以可以用第三方软件直接解压
     - 浏览器和其他工具能直接识别'Content-Encoding': 'deflate'并解压
+    - 遇到数据大时，压缩就占用很长时间
 2. 先分`chunk`，每个`chunk`都分别使用`zlib`压缩再传输
     - 分块压缩，只能分块解压。第三方工具失效
     - 将大文件压缩耗时分拆了，速度显著提升
 3. 整体`zlib`压缩，直接传输
     - 请求体大小有限制，无法上传大数据
 
-最开始本项目的`HTTP`和`WebSocket`都使用了方案二，先分`chunk`后`zlib`压缩，
-但使用`307`重定向后，发现`aiohttp`库对`http chunk`重定向请求支持不佳，所以`HTTP`的请求使用的是方案三，响应还是方案二
-如果要请求大数据，请使用`WebSocket`
-
-注意：推荐请使用`307`，不要使用`302`。`302`会将`POST`转成`GET`，但本项目中设计的是`HTTP`走`POST`，`WebSocket`走`GET`
+综合考虑，最终使用的是方案二。
+为防止`HTTP`遇到`30x`重定向时重复传输大数据，所以`HTTP`第一次抓取重定向后地址，第二次才是正真的传输数据
 
 ## 支持IPv6
 
@@ -304,11 +302,11 @@ from ksrpc.connections.http import HttpConnection  # noqa
 from ksrpc.connections.websocket import WebSocketConnection  # noqa
 
 connector = aiohttp.TCPConnector(family=socket.AF_INET6)  # IPv6
-async with SmartConnection(URL_HTTP, username=USERNAME, password=PASSWORD, connector=connector) as conn:
+async with SmartConnection(URL, username=USERNAME, password=PASSWORD, connector=connector) as conn:
     pass
 
 connector = aiohttp.TCPConnector(family=socket.AF_INET)  # IPv4
-async with WebSocketConnection(URL_HTTP, username=USERNAME, password=PASSWORD, connector=connector) as conn:
+async with WebSocketConnection(URL, username=USERNAME, password=PASSWORD, connector=connector) as conn:
     pass
 ```
 
@@ -321,7 +319,7 @@ from ksrpc.connections.http import HttpConnection  # noqa
 
 proxy = "http://127.0.0.1:10808"
 proxy_auth = aiohttp.BasicAuth('user', 'pass')
-async with HttpConnection(URL_HTTP, username=USERNAME, password=PASSWORD, proxy=proxy, proxy_auth=None) as conn:
+async with HttpConnection(URL, username=USERNAME, password=PASSWORD, proxy=proxy, proxy_auth=None) as conn:
     pass
 ```
 
