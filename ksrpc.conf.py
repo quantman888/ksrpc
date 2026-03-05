@@ -35,8 +35,7 @@ def _env_json_dict(name: str, default: dict) -> dict:
 # Web server config
 HOST = os.getenv("KSRPC_HOST", "0.0.0.0")
 PORT = _env_int("KSRPC_PORT", 8080)
-PATH_HTTP = os.getenv("KSRPC_PATH_HTTP", "/api/v1/{time}")
-PATH_WS = os.getenv("KSRPC_PATH_WS", PATH_HTTP)
+PATH = os.getenv("KSRPC_PATH", "/api/v1")
 
 
 # Basic auth config
