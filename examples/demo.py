@@ -15,7 +15,8 @@ from ksrpc.utils.async_ import async_to_sync
 
 
 # --------------------------
-# 固定初始化代码（不要改）
+# 固定初始化代码（pip install ksrpc==0.7.0）
+# demo更新地址: https://github.com/quantman888/ksrpc/blob/docker-stable/examples/demo.py
 # --------------------------
 nest_asyncio.apply()
 
