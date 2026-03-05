@@ -249,16 +249,16 @@ print(await demo1.__getattr__('__doc__')())  # 取的远程ksrpc.server.demo.__d
 
 更多调用方式参考[examples](https://github.com/wukan1986/ksrpc/blob/main/examples)
 
-## 环境变量
+## 环境变量和配置
 
-PRINT=0 屏蔽下载进度条(client端有效)
-CONFIG=config.py 指定外部配置文件路径（server端有效）
+1. 服务端`ksrpc/config_server.py`
+    - `CONFIG_SERVER` 通过环境变量指定配置文件路径。例如`CONFIG_SERVER=config_server.py`
 
-Docker Compose 场景补充：
+2. 客户端`ksrpc/config_client.py`
+    - `CONFIG_CLIENT` 通过环境变量指定配置文件路径。例如`CONFIG_CLIENT=config_client.py`
 
-- `docker-compose.yml` 在 compose `environment` 中固定 `CONFIG=/etc/ksrpc/ksrpc.conf.py`，Docker 场景不建议在 `.env` 配置 `CONFIG`。
-- 路径映射：宿主机 `${KSRPC_CONFIG_PATH}`（默认 `./ksrpc.conf.py`）→ 容器 `/etc/ksrpc/ksrpc.conf.py`。
-- Gunicorn 配置映射：宿主机 `${KSRPC_GUNICORN_CONFIG_PATH}`（默认 `./gunicorn.conf.py`）→ 容器 `/etc/ksrpc/gunicorn.conf.py`。
+    - `PRINT_PROGRESS=0` 通过环境变量屏蔽下载进度条。可覆盖`CONFIG_CLIENT`中的设置
+    - `HTTP_ALLOW_REDIRECTS=0` 通过环境变量禁用重定向。可覆盖`CONFIG_CLIENT`中的设置
 
 ## pyi存根文件
 
@@ -286,7 +286,8 @@ Docker Compose 场景补充：
     - 请求体大小有限制，无法上传大数据
 
 综合考虑，最终使用的是方案二。
-为防止`HTTP`遇到`30x`重定向时重复传输大数据，所以`HTTP`第一次抓取重定向后地址，第二次才是正真的传输数据
+
+为防止`HTTP`遇到`30x`重定向时重复传输大数据，所以`HTTP`第一次抓取重定向后地址，第二次才是正真的传输数据。可修改`HTTP_ALLOW_REDIRECTS`定制行为
 
 ## 支持IPv6
 
