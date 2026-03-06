@@ -17,6 +17,7 @@ ARG PIP_TRUSTED_HOST=
 
 COPY gunicorn.conf.py /app/gunicorn.conf.py
 COPY ksrpc.conf.py /app/ksrpc.conf.py
+COPY tushare_limited.py /app/tushare_limited.py
 
 RUN --mount=type=secret,id=ksrpc_pip_conf,target=/etc/pip.conf,required=false \
     set -eu \
