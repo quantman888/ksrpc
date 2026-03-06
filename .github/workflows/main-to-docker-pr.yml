@@ -38,6 +38,3 @@ jobs:
         - source: main
         - target: docker
         - purpose: keep docker branch up to date with latest upstream-synced main
-      auto_resolve_theirs_paths: |
-        README.md
-        examples/tushare
