@@ -86,13 +86,13 @@ def _install_limited_tushare_module():
     limited_module.__package__ = "ksrpc.server"
     limited_module.__all__ = ["opt_mins"]
 
-    def opt_mins(*args, **kwargs):
+    def __getattr__(name):
+        if name != "opt_mins":
+            raise AttributeError(name)
         src_module = import_module("ksrpc.server.tushare")
-        if not hasattr(src_module, "opt_mins"):
-            raise AttributeError("ksrpc.server.tushare.opt_mins not found")
-        return src_module.opt_mins(*args, **kwargs)
+        return getattr(src_module, "opt_mins")
 
-    limited_module.opt_mins = opt_mins
+    limited_module.__getattr__ = __getattr__
     sys.modules[_LIMITED_MODULE_NAME] = limited_module
 
 
