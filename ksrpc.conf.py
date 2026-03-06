@@ -2,6 +2,9 @@ import importlib.util
 import io
 import json
 import os
+import sys
+import types
+from importlib import import_module
 from pathlib import Path
 from contextlib import redirect_stdout
 
@@ -9,6 +12,20 @@ from contextlib import redirect_stdout
 # ---------------------------------------------------------------------
 # 需维护区（仅以下内容需要人工关注）
 # ---------------------------------------------------------------------
+# docker-limited 受限实例模块名（客户端使用 RpcClient 调用）
+_LIMITED_MODULE_NAME = "ksrpc.server.tushare_opt_mins"
+
+# docker-limited 硬切换规则：仅允许受限模块，其他一律拒绝
+_LOCKED_IMPORT_RULES = {
+    "ksrpc.server.tushare_opt_mins": True,
+    "ksrpc.server.tushare": False,
+    "ksrpc.server.demo": False,
+    "tushare": False,
+    "ksrpc.server.*": False,
+    "builtins": False,
+    "*": False,
+}
+
 # 兜底默认项：仅在上游 config_server.py 无法加载时使用。
 _FALLBACK_DEFAULTS = {
     "PORT": 8080,
@@ -16,14 +33,7 @@ _FALLBACK_DEFAULTS = {
     "PATH": "/api/v1",
     "USER_CREDENTIALS": {"admin": "change_me_now"},
     "TIMESTAMP_CHECK": 30,
-    "IMPORT_RULES": {
-        "ksrpc.server.tushare": True,
-        "ksrpc.server.demo": False,
-        "tushare": False,
-        "ksrpc.server.*": False,
-        "builtins": False,
-        "*": False,
-    },
+    "IMPORT_RULES": dict(_LOCKED_IMPORT_RULES),
     "CACHE_ENABLE": False,
     "CACHE_PATH": "/opt/ksrpc/cache",
     "CACHE_TIMEOUT": {
@@ -61,6 +71,29 @@ _EXPORT_UPPERCASE_ONLY = True
 # ---------------------------------------------------------------------
 _TRUE_VALUES = {"1", "true", "yes", "on", "y", "t"}
 _FALSE_VALUES = {"0", "false", "no", "off", "n", "f"}
+
+
+def _install_limited_tushare_module():
+    """
+    在配置加载阶段注入受限模块，仅暴露 opt_mins。
+    不改 ksrpc 源码，靠 sys.modules 注册实现。
+    """
+    if _LIMITED_MODULE_NAME in sys.modules:
+        return
+
+    limited_module = types.ModuleType(_LIMITED_MODULE_NAME)
+    limited_module.__file__ = __file__
+    limited_module.__package__ = "ksrpc.server"
+    limited_module.__all__ = ["opt_mins"]
+
+    def opt_mins(*args, **kwargs):
+        src_module = import_module("ksrpc.server.tushare")
+        if not hasattr(src_module, "opt_mins"):
+            raise AttributeError("ksrpc.server.tushare.opt_mins not found")
+        return src_module.opt_mins(*args, **kwargs)
+
+    limited_module.opt_mins = opt_mins
+    sys.modules[_LIMITED_MODULE_NAME] = limited_module
 
 
 def _load_upstream_defaults() -> dict:
@@ -165,6 +198,8 @@ def _normalize_int_dict(value: dict, fallback: dict) -> dict:
     return out or fallback
 
 
+_install_limited_tushare_module()
+
 _DEFAULT_CONFIG = _load_upstream_defaults()
 _CONFIG = dict(_DEFAULT_CONFIG)
 
@@ -198,6 +233,9 @@ for _key, _rule in _EXTRA_ENV_RULES.items():
             _CONFIG[_key] = float(_raw)
         except ValueError:
             continue
+
+# docker-limited 分支硬切换：忽略环境里的 IMPORT_RULES，统一锁定受限白名单。
+_CONFIG["IMPORT_RULES"] = dict(_LOCKED_IMPORT_RULES)
 
 # 导出配置常量
 for _key, _value in _CONFIG.items():
