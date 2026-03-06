@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ACTION="${1:-}"
-if [[ -z "${ACTION}" ]]; then
-  echo "Usage: bash ./ksrpc-compose.sh <generate|start|stop|restart|status|clean> [options]"
-  exit 1
+ACTION="restart"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    generate|start|restart|clean)
+      ACTION="$1"
+      shift
+      ;;
+    stop|status)
+      echo "Action '$1' is no longer supported."
+      echo "Use: bash ./ksrpc-compose.sh [generate|start|restart|clean] [options]"
+      exit 1
+      ;;
+    -*)
+      # 默认动作 restart，继续解析后续选项
+      ;;
+    *)
+      echo "Unknown action: $1"
+      echo "Allowed: generate|start|restart|clean"
+      exit 1
+      ;;
+  esac
 fi
-shift || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${SCRIPT_DIR}"
@@ -91,6 +107,12 @@ if ! [[ "${START_PORT}" =~ ^[0-9]+$ ]] || [[ "${START_PORT}" -lt 1 ]] || [[ "${S
   exit 1
 fi
 
+END_PORT=$((START_PORT + INSTANCES - 1))
+if [[ "${END_PORT}" -gt 65535 ]]; then
+  echo "Port range overflow: ${START_PORT}-${END_PORT} exceeds 65535"
+  exit 1
+fi
+
 port_in_use() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -104,39 +126,63 @@ port_in_use() {
   netstat -an 2>/dev/null | grep -E "[:.]${port}[[:space:]].*LISTEN" >/dev/null 2>&1
 }
 
-declare -A ALLOCATED_PORTS=()
-allocate_next_free_port() {
-  local candidate="$1"
-  while true; do
-    if [[ "${candidate}" -gt 65535 ]]; then
-      echo "No free port found in 1..65535"
-      exit 1
+port_is_expected_occupier() {
+  local port="$1"
+  local expected_name="$2"
+  local names
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+  names="$(docker ps --filter "publish=${port}" --format '{{.Names}}' 2>/dev/null || true)"
+  if [[ -z "${names}" ]]; then
+    return 1
+  fi
+  while IFS= read -r name; do
+    if [[ "${name}" == "${expected_name}" ]]; then
+      return 0
     fi
-    if [[ -n "${ALLOCATED_PORTS[${candidate}]+x}" ]]; then
-      candidate=$((candidate + 1))
-      continue
+  done <<< "${names}"
+  return 1
+}
+
+ensure_port_range_available() {
+  local i port expected_name
+  local -a occupied=()
+  for ((i = 1; i <= INSTANCES; i++)); do
+    port=$((START_PORT + i - 1))
+    if [[ "${INSTANCES}" -eq 1 ]]; then
+      expected_name="${BASE_CONTAINER_NAME}"
+    else
+      expected_name="$(printf "%s-%02d" "${BASE_CONTAINER_NAME}" "${i}")"
     fi
-    if port_in_use "${candidate}"; then
-      candidate=$((candidate + 1))
-      continue
+
+    if port_in_use "${port}"; then
+      if port_is_expected_occupier "${port}" "${expected_name}"; then
+        continue
+      fi
+      occupied+=("${port}")
     fi
-    ALLOCATED_PORTS["${candidate}"]=1
-    echo "${candidate}"
-    return
   done
+
+  if [[ "${#occupied[@]}" -gt 0 ]]; then
+    echo "Port range check failed."
+    echo "Required range: ${START_PORT}-${END_PORT}"
+    echo "Occupied by other process/container: ${occupied[*]}"
+    exit 1
+  fi
 }
 
 generate_compose() {
+  ensure_port_range_available
+
   cat > "${COMPOSE_FILE}" <<EOF
 services:
 EOF
 
-  local i host_port cache_host_path service_name container_name suffix next_port
-  next_port="${START_PORT}"
+  local i host_port cache_host_path service_name container_name suffix
 
   for ((i = 1; i <= INSTANCES; i++)); do
-    host_port="$(allocate_next_free_port "${next_port}")"
-    next_port=$((host_port + 1))
+    host_port=$((START_PORT + i - 1))
     suffix="$(printf "%02d" "${i}")"
     cache_host_path="./data/cache/${BASE_CONTAINER_NAME}-${suffix}"
     mkdir -p "${APP_DIR}/${cache_host_path#./}"
@@ -181,7 +227,7 @@ EOF
   echo "Generated: ${COMPOSE_FILE}"
   echo "Instances: ${INSTANCES}"
   echo "Container prefix: ${BASE_CONTAINER_NAME}"
-  echo "Start port: ${START_PORT} (auto skip occupied ports)"
+  echo "Port range: ${START_PORT}-${END_PORT} (strict mode)"
 }
 
 compose_multi() {
@@ -201,35 +247,21 @@ case "${ACTION}" in
     fi
     ;;
   start)
+    # 等价于首次部署/应用配置：强制重建以确保配置更新立即生效
     if [[ "${INSTANCES}" -eq 1 ]]; then
-      compose_single up -d --remove-orphans
+      compose_single up -d --remove-orphans --force-recreate
     else
       generate_compose
-      compose_multi up -d --remove-orphans
-    fi
-    ;;
-  stop)
-    if [[ "${INSTANCES}" -eq 1 ]]; then
-      compose_single down --remove-orphans
-    else
-      compose_multi down --remove-orphans
+      compose_multi up -d --remove-orphans --force-recreate
     fi
     ;;
   restart)
+    # 无参数默认走 restart，更新配置后直接运行本脚本即可生效
     if [[ "${INSTANCES}" -eq 1 ]]; then
-      compose_single down --remove-orphans
-      compose_single up -d --remove-orphans
+      compose_single up -d --remove-orphans --force-recreate
     else
       generate_compose
-      compose_multi down --remove-orphans
-      compose_multi up -d --remove-orphans
-    fi
-    ;;
-  status)
-    if [[ "${INSTANCES}" -eq 1 ]]; then
-      compose_single ps
-    else
-      compose_multi ps
+      compose_multi up -d --remove-orphans --force-recreate
     fi
     ;;
   clean)
@@ -241,7 +273,7 @@ case "${ACTION}" in
     ;;
   *)
     echo "Unknown action: ${ACTION}"
-    echo "Allowed: generate|start|stop|restart|status|clean"
+    echo "Allowed: generate|start|restart|clean"
     exit 1
     ;;
 esac

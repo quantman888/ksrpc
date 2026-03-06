@@ -23,7 +23,6 @@ UPSTREAM_CONFIG_PATH = REPO_ROOT / "ksrpc" / "config_server.py"
 LOCAL_CONFIG_PATH = REPO_ROOT / "ksrpc.conf.py"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 
-ALLOWED_EXTRA_KEYS = {"TUSHARE_TIMEOUT"}
 DEPRECATED_SERVICE_ALIAS_KEYS = {
     "KSRPC_BASIC_CREDENTIALS_JSON",
     "KSRPC_BASIC_PASSWORD",
@@ -38,6 +37,10 @@ DEPRECATED_SERVICE_ALIAS_KEYS = {
     "KSRPC_PATH_WS",
     "KSRPC_PORT",
     "KSRPC_TIMESTAMP_CHECK",
+}
+DISALLOWED_ENV_EXAMPLE_KEYS = {
+    "PORT",
+    "CACHE_PATH",
 }
 
 ENV_KEY_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
@@ -96,6 +99,8 @@ def _read_env_keys(path: Path) -> set[str]:
 
 def main() -> int:
     errors: list[str] = []
+    expected_env_example_keys: set[str] = set()
+    allowed_extra_keys: set[str] = set()
 
     # Ensure ksrpc.conf.py resolves local package when it introspects upstream defaults.
     sys.path.insert(0, str(REPO_ROOT))
@@ -110,8 +115,23 @@ def main() -> int:
     upstream_keys = _public_uppercase_keys(upstream_module)
     local_keys = _public_uppercase_keys(local_module)
 
+    extra_rules = getattr(local_module, "_EXTRA_ENV_RULES", {})
+    if isinstance(extra_rules, dict):
+        extra_rule_keys = {k for k in extra_rules if isinstance(k, str)}
+        expected_env_example_keys = set(extra_rule_keys)
+        allowed_extra_keys = set(extra_rule_keys)
+    else:
+        errors.append(
+            _format_diff(
+                "extra_env_rules",
+                "ksrpc.conf.py._EXTRA_ENV_RULES",
+                [],
+                ["_EXTRA_ENV_RULES_not_dict"],
+            )
+        )
+
     config_missing = sorted(upstream_keys - local_keys)
-    config_extra = sorted((local_keys - upstream_keys) - ALLOWED_EXTRA_KEYS)
+    config_extra = sorted((local_keys - upstream_keys) - allowed_extra_keys)
     if config_missing or config_extra:
         errors.append(
             _format_diff(
@@ -119,29 +139,6 @@ def main() -> int:
                 "ksrpc/config_server.py_vs_ksrpc.conf.py",
                 config_missing,
                 config_extra,
-            )
-        )
-
-    extra_rules = getattr(local_module, "_EXTRA_ENV_RULES", {})
-    if isinstance(extra_rules, dict):
-        extra_rule_keys = {k for k in extra_rules if isinstance(k, str)}
-        non_whitelisted = sorted(extra_rule_keys - ALLOWED_EXTRA_KEYS)
-        if non_whitelisted:
-            errors.append(
-                _format_diff(
-                    "extra_key_whitelist",
-                    "ksrpc.conf.py._EXTRA_ENV_RULES",
-                    [],
-                    non_whitelisted,
-                )
-            )
-    else:
-        errors.append(
-            _format_diff(
-                "extra_key_whitelist",
-                "ksrpc.conf.py._EXTRA_ENV_RULES",
-                [],
-                ["_EXTRA_ENV_RULES_not_dict"],
             )
         )
 
@@ -188,6 +185,26 @@ def main() -> int:
                     _display_path(ENV_EXAMPLE_PATH),
                     [],
                     env_example_aliases,
+                )
+            )
+        env_example_disallowed = sorted(env_example_keys & DISALLOWED_ENV_EXAMPLE_KEYS)
+        if env_example_disallowed:
+            errors.append(
+                _format_diff(
+                    "disallowed_env_example_keys",
+                    _display_path(ENV_EXAMPLE_PATH),
+                    [],
+                    env_example_disallowed,
+                )
+            )
+        env_example_missing = sorted(expected_env_example_keys - env_example_keys)
+        if env_example_missing:
+            errors.append(
+                _format_diff(
+                    "extra_env_rule_keys_not_in_env_example",
+                    _display_path(ENV_EXAMPLE_PATH),
+                    env_example_missing,
+                    [],
                 )
             )
 
