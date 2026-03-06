@@ -44,6 +44,12 @@ on:
     secrets:
       RUNNER_PROBE_TOKEN:
         required: false
+      BRANCH_SYNC_PR_TOKEN:
+        required: false
+      GH_APP_ID:
+        required: false
+      GH_APP_PRIVATE_KEY:
+        required: false
 
 permissions:
   contents: write
@@ -79,6 +85,58 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate GitHub App token
+        id: app_token
+        if: ${{ env.GH_APP_ID != '' && env.GH_APP_PRIVATE_KEY != '' }}
+        continue-on-error: true
+        env:
+          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.GH_APP_ID }}
+          private-key: ${{ env.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Resolve PR auth token
+        id: auth_token
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          APP_TOKEN_STATUS: ${{ steps.app_token.outcome }}
+          SECRET_TOKEN: ${{ secrets.BRANCH_SYNC_PR_TOKEN }}
+          DEFAULT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh_token=""
+          token_source=""
+
+          if [[ -n "${APP_TOKEN}" ]]; then
+            gh_token="${APP_TOKEN}"
+            token_source="github_app"
+          elif [[ -n "${SECRET_TOKEN}" ]]; then
+            gh_token="${SECRET_TOKEN}"
+            token_source="branch_sync_pr_token"
+          else
+            gh_token="${DEFAULT_TOKEN}"
+            token_source="github_token"
+          fi
+
+          if [[ "${APP_TOKEN_STATUS}" == "failure" ]]; then
+            echo "GitHub App token generation failed, falling back to secondary token source." >&2
+          fi
+
+          if [[ -z "${gh_token}" ]]; then
+            echo "failed to resolve auth token for branch-sync PR" >&2
+            exit 1
+          fi
+
+          echo "::add-mask::${gh_token}"
+          {
+            echo "gh_token=${gh_token}"
+            echo "token_source=${token_source}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Fetch source and target branches
         run: |
           set -euo pipefail
@@ -92,7 +150,8 @@ jobs:
       - name: Check commits and open/create PR
         id: pr
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.auth_token.outputs.gh_token }}
+          AUTH_TOKEN_SOURCE: ${{ steps.auth_token.outputs.token_source }}
         run: |
           set -euo pipefail
           source_branch="${{ inputs.source_branch }}"
@@ -111,6 +170,7 @@ jobs:
           commit_count="$(git rev-list --count "origin/${target_branch}..origin/${source_branch}")"
           if [[ "${commit_count}" -gt 0 ]]; then
             has_new_commits="true"
+            echo "Using auth token source: ${AUTH_TOKEN_SOURCE}"
 
             if [[ -n "${auto_resolve_theirs_paths}" ]]; then
               pr_head_branch="sync/${source_branch}-into-${target_branch}"
@@ -166,14 +226,40 @@ jobs:
               pr_exists="true"
               pr_url="${existing_pr_url}"
             else
-              set +e
-              pr_create_output="$(gh pr create \
-                --base "${target_branch}" \
-                --head "${repo_owner}:${pr_head_branch}" \
-                --title "${pr_title}" \
-                --body "${pr_body}" 2>&1)"
-              pr_create_code=$?
-              set -e
+              max_attempts=3
+              attempt=1
+              delay_seconds=2
+              pr_create_output=""
+              pr_create_code=1
+
+              while [[ ${attempt} -le ${max_attempts} ]]; do
+                set +e
+                pr_create_output="$(gh pr create \
+                  --base "${target_branch}" \
+                  --head "${repo_owner}:${pr_head_branch}" \
+                  --title "${pr_title}" \
+                  --body "${pr_body}" 2>&1)"
+                pr_create_code=$?
+                set -e
+
+                if [[ ${pr_create_code} -eq 0 ]]; then
+                  break
+                fi
+
+                # Make workflow idempotent: if PR already exists, reuse it instead of failing.
+                if echo "${pr_create_output}" | grep -qi "already exists"; then
+                  break
+                fi
+
+                if [[ ${attempt} -ge ${max_attempts} ]]; then
+                  break
+                fi
+
+                echo "gh pr create failed (attempt ${attempt}/${max_attempts}), retry in ${delay_seconds}s..." >&2
+                sleep "${delay_seconds}"
+                delay_seconds=$((delay_seconds * 2))
+                attempt=$((attempt + 1))
+              done
 
               if [[ ${pr_create_code} -eq 0 ]]; then
                 pr_url="${pr_create_output}"

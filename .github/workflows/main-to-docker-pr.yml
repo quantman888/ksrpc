@@ -26,6 +26,9 @@ jobs:
     uses: ./.github/workflows/branch-sync-pr.reusable.yml
     secrets:
       RUNNER_PROBE_TOKEN: ${{ secrets.RUNNER_PROBE_TOKEN }}
+      BRANCH_SYNC_PR_TOKEN: ${{ secrets.BRANCH_SYNC_PR_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
     with:
       source_branch: main
       target_branch: docker
@@ -35,6 +38,3 @@ jobs:
         - source: main
         - target: docker
         - purpose: keep docker branch up to date with latest upstream-synced main
-      auto_resolve_theirs_paths: |
-        README.md
-        examples/tushare
