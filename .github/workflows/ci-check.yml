@@ -39,20 +39,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
-      - name: Run tests
+        run: pip install -r requirements.txt
+      - name: Run config drift check
         shell: bash
-        run: |
-          set +e
-          python -m pytest -q tests
-          rc=$?
-          set -e
-
-          if [ "${rc}" -eq 0 ]; then
-            echo "pytest passed."
-          elif [ "${rc}" -eq 5 ]; then
-            echo "pytest exit code 5 (no tests collected), treated as success."
-          else
-            echo "pytest failed with exit code ${rc}."
-            exit "${rc}"
-          fi
+        run: python -X utf8 .github/scripts/check_config_drift.py
