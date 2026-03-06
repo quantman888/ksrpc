@@ -166,22 +166,14 @@ EOF
       TZ: Asia/Shanghai
       CONFIG_SERVER: /etc/ksrpc/ksrpc.conf.py
       KSRPC_GUNICORN_BIND: 0.0.0.0:8080
-      KSRPC_PORT: "8080"
-      KSRPC_CACHE_PATH: /opt/ksrpc/cache
+      PORT: "8080"
+      CACHE_PATH: /opt/ksrpc/cache
     volumes:
       - "\${KSRPC_GUNICORN_CONFIG_PATH:-./gunicorn.conf.py}:/etc/ksrpc/gunicorn.conf.py:ro"
       - "\${KSRPC_CONFIG_PATH:-./ksrpc.conf.py}:/etc/ksrpc/ksrpc.conf.py:ro"
       - "${cache_host_path}:/opt/ksrpc/cache"
     ports:
       - "${host_port}:8080"
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - python -c "import socket; p=8080; s=socket.create_connection(('127.0.0.1', p), 3); s.close()"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
 EOF
     } >> "${COMPOSE_FILE}"
   done
