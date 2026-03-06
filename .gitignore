@@ -4,3 +4,5 @@
 
 # Keep template tracked
 !.env.example
+ts_demo.py
+__pycache__
