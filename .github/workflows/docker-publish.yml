@@ -1,0 +1,71 @@
+name: Docker Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Only required on docker-stable branch (example: 1.2.3 or 1.2.3-rc.1)"
+        required: false
+        type: string
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  guard_branch:
+    name: Docker Publish / Branch Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate allowed branches
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${REF_TYPE}" != "branch" ]]; then
+            echo "::error::workflow_dispatch can only run on branch refs. current ref_type=${REF_TYPE}"
+            exit 1
+          fi
+
+          case "${REF_NAME}" in
+            docker|docker-limited)
+              ;;
+            docker-stable)
+              if [[ -z "${RELEASE_VERSION}" ]]; then
+                echo "::error::docker-stable requires inputs.release_version"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::allowed branches: docker / docker-stable / docker-limited; current=${REF_NAME}"
+              exit 1
+              ;;
+          esac
+
+  docker_publish:
+    name: Docker Publish / Reusable
+    needs: [guard_branch]
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@f90ae8f03b57c2e00c6d1318211896f51fe392e1
+    with:
+      OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
+      OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      OCI_DOCKERFILE_PATH: ${{ vars.DOCKERFILE_PATH || 'Dockerfile' }}
+      OCI_BUILD_CONTEXT: ${{ vars.BUILD_CONTEXT || '.' }}
+      OCI_TARGET_PLATFORMS: ${{ vars.TARGET_PLATFORMS || 'linux/amd64' }}
+      OCI_BUILD_ARGS: ${{ vars.BUILD_ARGS || '' }}
+      OCI_PUSH_IMAGE: true
+      OCI_PUBLISH_CHANNEL: ${{ github.ref_name == 'docker-stable' && 'release' || 'edge' }}
+      OCI_RELEASE_VERSION: ${{ github.ref_name == 'docker-stable' && inputs.release_version || '' }}
+      OCI_PUBLISH_LATEST: ${{ github.ref_name == 'docker-stable' }}
+      OCI_GATE_VULN_IGNORE_UNFIXED: true
+    secrets:
+      nexus_username: ${{ secrets.NEXUS_USERNAME }}
+      nexus_password: ${{ secrets.NEXUS_PASSWORD }}
