@@ -17,8 +17,7 @@ _FALLBACK_DEFAULTS = {
     "USER_CREDENTIALS": {"admin": "change_me_now"},
     "TIMESTAMP_CHECK": 30,
     "IMPORT_RULES": {
-        "tushare_limited": True,
-        "ksrpc.server.tushare": False,
+        "ksrpc.server.tushare": True,
         "ksrpc.server.demo": False,
         "tushare": False,
         "ksrpc.server.*": False,
