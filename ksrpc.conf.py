@@ -36,6 +36,7 @@ def _env_json_dict(name: str, default: dict) -> dict:
 HOST = os.getenv("KSRPC_HOST", "0.0.0.0")
 PORT = _env_int("KSRPC_PORT", 8080)
 PATH = os.getenv("KSRPC_PATH", "/api/v1")
+TIMESTAMP_CHECK = _env_bool("KSRPC_TIMESTAMP_CHECK", True)
 
 
 # Basic auth config

@@ -7,6 +7,7 @@ services:
     env_file:
       - .env
     environment:
+      TZ: Asia/Shanghai
       CONFIG_SERVER: /etc/ksrpc/ksrpc.conf.py
       KSRPC_GUNICORN_BIND: 0.0.0.0:8080
       KSRPC_PORT: "8080"
