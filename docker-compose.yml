@@ -1,7 +1,9 @@
 services:
   ksrpc:
-    image: ${OCI_IMAGE_REF}
-    container_name: ${KSRPC_CONTAINER_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${KSRPC_CONTAINER_NAME:-ksrpc}
     restart: always
     command: ["python", "-u", "-m", "gunicorn", "-c", "/etc/ksrpc/gunicorn.conf.py", "ksrpc.run_gunicorn:web_app"]
     env_file:
@@ -13,8 +15,8 @@ services:
       PORT: "8080"
       CACHE_PATH: /opt/ksrpc/cache
     volumes:
-      - "${KSRPC_GUNICORN_CONFIG_PATH:-./gunicorn.conf.py}:/etc/ksrpc/gunicorn.conf.py:ro"
-      - "${KSRPC_CONFIG_PATH:-./ksrpc.conf.py}:/etc/ksrpc/ksrpc.conf.py:ro"
-      - "${KSRPC_CACHE_HOST_PATH:-./data/cache}:/opt/ksrpc/cache"
+      - "./gunicorn.conf.py:/etc/ksrpc/gunicorn.conf.py:ro"
+      - "./ksrpc.conf.py:/etc/ksrpc/ksrpc.conf.py:ro"
+      - "./data/cache:/opt/ksrpc/cache"
     ports:
-      - "${KSRPC_HOST_PORT}:8080"
+      - "${KSRPC_HOST_PORT:-19801}:8080"
