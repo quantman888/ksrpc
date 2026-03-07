@@ -97,7 +97,7 @@ jobs:
     name: Artifact Publish / OCI
     if: ${{ inputs.publish_oci_image }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@f46fea85c561dfd032be53c02bbe1b16bb93ee53
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@420bd8e89f4d3d2e6d90791a8eeed945edc8c087
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -110,6 +110,54 @@ jobs:
       OCI_RELEASE_VERSION: ${{ github.ref_name == 'docker-stable' && inputs.release_version || '' }}
       OCI_PUBLISH_LATEST: ${{ github.ref_name == 'docker-stable' }}
       OCI_GATE_VULN_IGNORE_UNFIXED: true
+      OCI_GATE_RUN_ARGS: >-
+        -p 18080:8080
+        -e TZ=Asia/Shanghai
+        -e CONFIG_SERVER=/etc/ksrpc/config_server.py
+        -v '${{ github.workspace }}/gunicorn.conf.py:/etc/ksrpc/gunicorn.conf.py:ro'
+        -v '${{ github.workspace }}/config_server.example.py:/etc/ksrpc/config_server.py:ro'
+        -v '${{ github.workspace }}/.artifacts/oci-gate-cache:/opt/ksrpc/cache'
+      OCI_GATE_COMMAND: >-
+        python -u -m gunicorn -c /etc/ksrpc/gunicorn.conf.py ksrpc.run_gunicorn:web_app
+      OCI_GATE_SMOKE_CMD: |
+        python -X utf8 <<'PY'
+        import asyncio
+        import time
+
+        from ksrpc.client import RpcClient
+        from ksrpc.connections.http import HttpConnection
+
+
+        async def invoke() -> None:
+            async with HttpConnection(
+                "http://127.0.0.1:8080/api/v1",
+                username="admin",
+                password="password123",
+            ) as conn:
+                demo = RpcClient("ksrpc.server.demo", conn)
+                frame = await demo.test()
+                assert frame["A"].tolist() == [1, 2, 3, 4, 5], frame
+
+
+        async def verify() -> None:
+            deadline = time.monotonic() + 25
+            last_error = None
+
+            while time.monotonic() < deadline:
+                try:
+                    await asyncio.wait_for(invoke(), timeout=10)
+                    return
+                except Exception as exc:  # noqa: PERF203
+                    last_error = exc
+                    await asyncio.sleep(2)
+
+            if last_error is not None:
+                raise last_error
+            raise TimeoutError("ksrpc OCI gate smoke check timed out")
+
+
+        asyncio.run(verify())
+        PY
     secrets:
       nexus_username: ${{ secrets.NEXUS_USERNAME }}
       nexus_password: ${{ secrets.NEXUS_PASSWORD }}
@@ -118,7 +166,7 @@ jobs:
     name: Artifact Publish / Python Package
     if: ${{ inputs.publish_python_package && vars.ENABLE_PYTHON_PACKAGE_PUBLISH == 'true' }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@f46fea85c561dfd032be53c02bbe1b16bb93ee53
+    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@420bd8e89f4d3d2e6d90791a8eeed945edc8c087
     with:
       PYTHON_PACKAGE_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL }}
       PYTHON_PACKAGE_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL || '' }}
