@@ -38,7 +38,7 @@ permissions:
 jobs:
   runner_probe:
     name: Fork Sync / Runner Probe
-    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@edbf2452cb0e758c0d7ae4e3af265743ee1d09cb
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@edbf24560d25b0bc79c83dcc60af0af9d0bf1e45
     with:
       RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
       RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
