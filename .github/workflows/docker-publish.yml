@@ -53,7 +53,7 @@ jobs:
   docker_publish:
     name: Docker Publish / Reusable
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@f90ae8f03b57c2e00c6d1318211896f51fe392e1
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@edbf2452cb0e758c0d7ae4e3af265743ee1d09cb
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
