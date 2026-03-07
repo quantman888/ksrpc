@@ -18,7 +18,7 @@ permissions:
 jobs:
   runner_probe:
     name: CI Check / Runner Probe
-    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@e1125b9813c58f9f770b00e695bf400e62902825
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@42b00e5a2cb5a3259e6479a42a77f4c8eeb4069c
     with:
       RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
       RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
