@@ -45,7 +45,7 @@ concurrency:
 jobs:
   runner_probe:
     name: Reusable Workflow Update / Runner Probe
-    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@c2ed4c235f9d4035b43fe6235018ea0578b3c5fb
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@e1125b9813c58f9f770b00e695bf400e62902825
     with:
       RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
       RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
@@ -55,7 +55,7 @@ jobs:
 
   update-reusable-workflow-ref:
     needs: [runner_probe]
-    uses: quantman888/workflow-reusable/.github/workflows/reusable-workflow-update-pr.reusable.yml@c2ed4c235f9d4035b43fe6235018ea0578b3c5fb
+    uses: quantman888/workflow-reusable/.github/workflows/reusable-workflow-update-pr.reusable.yml@e1125b9813c58f9f770b00e695bf400e62902825
     with:
       RUNS_ON_JSON: ${{ needs.runner_probe.outputs.selected_runs_on_json }}
       target_ref: ${{ github.event.inputs.target_ref || github.event.client_payload.target_ref || '' }}
