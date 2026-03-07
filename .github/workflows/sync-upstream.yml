@@ -39,77 +39,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  runner_probe:
-    name: Sync Upstream / Runner Probe
-    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@f90ae8f03b57c2e00c6d1318211896f51fe392e1
-    with:
-      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
-      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
-      RUNNER_FALLBACK_POLICY: github-hosted
-    secrets:
-      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
-
   sync:
     name: Sync Upstream / Fast Forward
-    needs: [runner_probe]
     if: ${{ github.ref_name == 'ops/sync' }}
-    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
-    env:
-      TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'main' }}
-      UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'wukan1986/ksrpc' }}
-      UPSTREAM_BRANCH: ${{ github.event.inputs.upstream_branch || 'main' }}
-      FORCE_RESET: ${{ github.event.inputs.force || 'false' }}
-    steps:
-      - name: Checkout target branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TARGET_BRANCH }}
-          fetch-depth: 0
-
-      - name: Configure git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Configure upstream remote
-        run: |
-          if git remote get-url upstream >/dev/null 2>&1; then
-            git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
-          else
-            git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
-          fi
-
-      - name: Fetch upstream branch
-        run: git fetch upstream "${UPSTREAM_BRANCH}"
-
-      - name: Sync and push
-        run: |
-          set -euo pipefail
-
-          local_sha="$(git rev-parse HEAD)"
-          upstream_sha="$(git rev-parse "upstream/${UPSTREAM_BRANCH}")"
-
-          {
-            echo "### Sync result"
-            echo "- target: ${TARGET_BRANCH}"
-            echo "- upstream: ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}"
-            echo "- local_sha: ${local_sha}"
-            echo "- upstream_sha: ${upstream_sha}"
-            echo "- force: ${FORCE_RESET}"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          if [ "${FORCE_RESET}" = "true" ]; then
-            git reset --hard "upstream/${UPSTREAM_BRANCH}"
-            git push --force-with-lease origin "HEAD:${TARGET_BRANCH}"
-            echo "- action: force-reset" >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          if [ "${local_sha}" = "${upstream_sha}" ]; then
-            echo "- action: skip-already-up-to-date" >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          git merge --ff-only "upstream/${UPSTREAM_BRANCH}"
-          git push origin "HEAD:${TARGET_BRANCH}"
-          echo "- action: fast-forward" >> "${GITHUB_STEP_SUMMARY}"
+    uses: quantman888/workflow-reusable/.github/workflows/fork-sync.reusable.yml@5137cd7b2817c4f19d569431f4919a14b46a0c9b
+    with:
+      target_branch: ${{ github.event.inputs.target_branch || 'main' }}
+      upstream_repo: ${{ github.event.inputs.upstream_repo || 'wukan1986/ksrpc' }}
+      upstream_branch: ${{ github.event.inputs.upstream_branch || 'main' }}
+      force_reset: ${{ github.event.inputs.force == 'true' }}
+    secrets:
+      RUNNER_PROBE_TOKEN: ${{ secrets.RUNNER_PROBE_TOKEN }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
