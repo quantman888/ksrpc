@@ -1,0 +1,105 @@
+name: workflow-ref-policy
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+  push:
+    branches:
+      - ops/sync
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  runner_probe:
+    name: Workflow Ref Policy / Runner Probe
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@120185f677ab0a42d93e1289bcd2002b88f17d89
+    with:
+      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
+      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
+      RUNNER_FALLBACK_POLICY: github-hosted
+    secrets:
+      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
+
+  validate-workflow-uses-ref:
+    needs: [runner_probe]
+    runs-on: ${{ fromJSON(needs.runner_probe.outputs.selected_runs_on_json) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Enforce uses reference policy
+        run: |
+          set -euo pipefail
+
+          refs_file="$(mktemp)"
+          errors_file="$(mktemp)"
+          trap 'rm -f "${refs_file}" "${errors_file}"' EXIT
+
+          find ".github/workflows" -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 \
+            | while IFS= read -r -d '' file; do
+                awk -v file="${file}" '
+                  /^[[:space:]]*uses:[[:space:]]*/ {
+                    ref = $0
+                    sub(/^[[:space:]]*uses:[[:space:]]*/, "", ref)
+                    sub(/[[:space:]]*#.*/, "", ref)
+                    gsub(/^[\"\047]|[\"\047]$/, "", ref)
+                    gsub(/[[:space:]]+$/, "", ref)
+
+                    if (ref != "") {
+                      printf "%s\t%d\t%s\n", file, NR, ref
+                    }
+                  }
+                ' "${file}"
+              done > "${refs_file}"
+
+          while IFS=$'\t' read -r file line ref; do
+            if [[ "${ref}" == ./* || "${ref}" == ../* || "${ref}" == docker://* ]]; then
+              continue
+            fi
+
+            if [[ "${ref}" == *\$\{\{* ]]; then
+              printf "%s:%s dynamic uses reference is not allowed: %s\n" "${file}" "${line}" "${ref}" >> "${errors_file}"
+              continue
+            fi
+
+            if [[ "${ref}" != *@* ]]; then
+              printf "%s:%s uses reference must include @ref: %s\n" "${file}" "${line}" "${ref}" >> "${errors_file}"
+              continue
+            fi
+
+            ref_name="${ref##*@}"
+
+            if [[ "${ref_name}" == "main" || "${ref_name}" == "master" ]]; then
+              printf "%s:%s uses reference with @main/@master is forbidden: %s\n" "${file}" "${line}" "${ref}" >> "${errors_file}"
+              continue
+            fi
+
+            if [[ "${ref_name}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              continue
+            fi
+
+            if [[ "${ref_name}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+              continue
+            fi
+
+            printf "%s:%s uses reference must be pinned to full SHA or v* tag: %s\n" "${file}" "${line}" "${ref}" >> "${errors_file}"
+          done < "${refs_file}"
+
+          if [[ -s "${errors_file}" ]]; then
+            echo "Workflow reference policy violations:"
+            cat "${errors_file}"
+            exit 1
+          fi
+
+          echo "Workflow reference policy checks passed."

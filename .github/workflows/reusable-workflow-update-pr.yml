@@ -1,0 +1,69 @@
+name: reusable-workflow-update-pr
+
+on:
+  repository_dispatch:
+    types:
+      - reusable-workflow-release
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: "Target reusable workflow ref (40-hex SHA or v* tag)"
+        required: false
+        type: string
+      target_sha:
+        description: "Target reusable workflow commit SHA (40 hex)"
+        required: false
+        type: string
+      target_tag:
+        description: "Target reusable workflow tag (v*)"
+        required: false
+        type: string
+      reusable_repo:
+        description: "Reusable workflow repository (owner/repo)"
+        required: false
+        type: string
+        default: "quantman888/workflow-reusable"
+      reusable_workflow_path:
+        description: "Optional single reusable workflow path. Leave empty to update all refs under quantman888/workflow-reusable."
+        required: false
+        type: string
+        default: ""
+      source_repository:
+        description: "Dispatch source repository (optional audit trail)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: reusable-workflow-update-pr
+  cancel-in-progress: false
+
+jobs:
+  runner_probe:
+    name: Reusable Workflow Update / Runner Probe
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@120185f677ab0a42d93e1289bcd2002b88f17d89
+    with:
+      RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
+      RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
+      RUNNER_FALLBACK_POLICY: github-hosted
+    secrets:
+      runner_probe_token: ${{ secrets.RUNNER_PROBE_TOKEN }}
+
+  update-reusable-workflow-ref:
+    needs: [runner_probe]
+    uses: quantman888/workflow-reusable/.github/workflows/reusable-workflow-update-pr.reusable.yml@120185f677ab0a42d93e1289bcd2002b88f17d89
+    with:
+      RUNS_ON_JSON: ${{ needs.runner_probe.outputs.selected_runs_on_json }}
+      target_ref: ${{ github.event.inputs.target_ref || github.event.client_payload.target_ref || '' }}
+      target_sha: ${{ github.event.inputs.target_sha || github.event.client_payload.target_sha || '' }}
+      target_tag: ${{ github.event.inputs.target_tag || github.event.client_payload.target_tag || '' }}
+      reusable_repo: ${{ github.event.inputs.reusable_repo || github.event.client_payload.reusable_repo || 'quantman888/workflow-reusable' }}
+      reusable_workflow_path: ${{ github.event.inputs.reusable_workflow_path || github.event.client_payload.reusable_workflow_path || '' }}
+      source_repository: ${{ github.event.inputs.source_repository || github.event.client_payload.source_repository || '' }}
+    secrets:
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}

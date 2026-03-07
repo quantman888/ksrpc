@@ -87,6 +87,8 @@ docker compose logs -f --tail=100
 
 - `.github/workflows/sync-upstream.yml`：每天同步上游 `main` 到本仓库 `main`。
 - `.github/workflows/main-to-docker-pr.yml`：在 `main` 更新后自动创建 `main -> docker` 的同步 PR。
+- `.github/workflows/workflow-ref-policy.yml`：约束 `.github/workflows/` 中所有 `uses:` 必须 pin 到完整 SHA 或受控 `v*` tag。
+- `.github/workflows/reusable-workflow-update-pr.yml`：统一把仓内所有 central reusable refs 升级到新的 blessed ref，并通过 GitHub App bot 开 PR。
 - `quantman888/workflow-reusable/.github/workflows/fork-sync.reusable.yml`：`sync-upstream.yml` 远程调用的统一 fork 同步实现。
 - `quantman888/workflow-reusable/.github/workflows/branch-sync-pr.reusable.yml`：`main-to-docker-pr.yml` 远程调用的统一开 PR 实现。
 - `.github/workflows/release-pypi.yml`：Release 触发 PyPI 发布。

@@ -42,7 +42,7 @@ jobs:
   sync:
     name: Sync Upstream / Fast Forward
     if: ${{ github.ref_name == 'ops/sync' }}
-    uses: quantman888/workflow-reusable/.github/workflows/fork-sync.reusable.yml@3a74494444ebf60ec855923fe1f98c111e9a8270
+    uses: quantman888/workflow-reusable/.github/workflows/fork-sync.reusable.yml@120185f677ab0a42d93e1289bcd2002b88f17d89
     with:
       target_branch: ${{ github.event.inputs.target_branch || 'main' }}
       upstream_repo: ${{ github.event.inputs.upstream_repo || 'wukan1986/ksrpc' }}
