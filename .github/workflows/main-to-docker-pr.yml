@@ -23,7 +23,7 @@ jobs:
   open_pr:
     name: Branch Sync / Open PR
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    uses: quantman888/workflow-reusable/.github/workflows/branch-sync-pr.reusable.yml@5137cd7b2817c4f19d569431f4919a14b46a0c9b
+    uses: quantman888/workflow-reusable/.github/workflows/branch-sync-pr.reusable.yml@3a74494444ebf60ec855923fe1f98c111e9a8270
     secrets:
       RUNNER_PROBE_TOKEN: ${{ secrets.RUNNER_PROBE_TOKEN }}
       GH_APP_ID: ${{ secrets.GH_APP_ID }}
