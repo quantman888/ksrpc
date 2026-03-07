@@ -20,7 +20,7 @@ permissions:
 jobs:
   runner_probe:
     name: Workflow Ref Policy / Runner Probe
-    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@420bd8e89f4d3d2e6d90791a8eeed945edc8c087
+    uses: quantman888/workflow-reusable/.github/workflows/runner-fallback.reusable.yml@987fbd44614c02d72b1cdce69a5b8dd5f4be9c71
     with:
       RUNNER_SELF_HOSTED_LABELS: ${{ vars.RUNNER_SELF_HOSTED_LABELS || 'self-hosted,linux,x64' }}
       RUNNER_GITHUB_HOSTED_LABEL: ${{ vars.RUNNER_GITHUB_HOSTED_LABEL || 'ubuntu-latest' }}
