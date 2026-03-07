@@ -8,15 +8,13 @@ RUN apt-get update \
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    CONFIG=""
+    PYTHONUNBUFFERED=1
 
 ARG KSRPC_PIP_PACKAGE=ksrpc
 ARG PIP_EXTRA_INDEX_URL=
 ARG PIP_TRUSTED_HOST=
 
 COPY gunicorn.conf.py /app/gunicorn.conf.py
-COPY ksrpc.conf.py /app/ksrpc.conf.py
 
 RUN --mount=type=secret,id=ksrpc_pip_conf,target=/etc/pip.conf,required=false \
     set -eu \

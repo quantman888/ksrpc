@@ -13,34 +13,44 @@ from types import ModuleType
 def _find_repo_root() -> Path:
     script_path = Path(__file__).resolve()
     for candidate in (script_path.parent, *script_path.parents):
-        if (candidate / "ksrpc.conf.py").exists() and (candidate / "ksrpc" / "config_server.py").exists():
+        if (candidate / "config_server.example.py").exists() and (candidate / "ksrpc" / "config_server.py").exists():
             return candidate
     return script_path.parents[2]
 
 
 REPO_ROOT = _find_repo_root()
 UPSTREAM_CONFIG_PATH = REPO_ROOT / "ksrpc" / "config_server.py"
-LOCAL_CONFIG_PATH = REPO_ROOT / "ksrpc.conf.py"
+LOCAL_CONFIG_PATH = REPO_ROOT / "config_server.example.py"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 
-DEPRECATED_SERVICE_ALIAS_KEYS = {
-    "KSRPC_BASIC_CREDENTIALS_JSON",
-    "KSRPC_BASIC_PASSWORD",
-    "KSRPC_BASIC_USER",
-    "KSRPC_CACHE_ENABLE",
-    "KSRPC_CACHE_PATH",
-    "KSRPC_CACHE_TIMEOUT_JSON",
-    "KSRPC_HOST",
-    "KSRPC_IMPORT_RULES_JSON",
-    "KSRPC_PATH",
-    "KSRPC_PATH_HTTP",
-    "KSRPC_PATH_WS",
-    "KSRPC_PORT",
-    "KSRPC_TIMESTAMP_CHECK",
+REQUIRED_ENV_EXAMPLE_KEYS = {
+    "OCI_IMAGE_REF",
+    "KSRPC_CONTAINER_NAME",
+    "KSRPC_HOST_PORT",
+    "KSRPC_INSTANCES",
+    "TUSHARE_TOKEN",
 }
+
 DISALLOWED_ENV_EXAMPLE_KEYS = {
+    "KSRPC_CONFIG_PATH",
+    "KSRPC_GUNICORN_BIND",
+    "KSRPC_GUNICORN_CONFIG_PATH",
+    "KSRPC_GUNICORN_WORKER_CLASS",
+    "KSRPC_GUNICORN_WORKERS",
+    "KSRPC_GUNICORN_TIMEOUT",
+    "KSRPC_GUNICORN_GRACEFUL_TIMEOUT",
+    "KSRPC_GUNICORN_KEEPALIVE",
+    "KSRPC_GUNICORN_BACKLOG",
+    "KSRPC_GUNICORN_MAX_REQUESTS",
+    "KSRPC_GUNICORN_MAX_REQUESTS_JITTER",
+    "GUNICORN_CMD_ARGS",
     "PORT",
     "CACHE_PATH",
+    "USER_CREDENTIALS",
+    "TIMESTAMP_CHECK",
+    "IMPORT_RULES",
+    "CACHE_ENABLE",
+    "CACHE_TIMEOUT",
 }
 
 ENV_KEY_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
@@ -99,11 +109,6 @@ def _read_env_keys(path: Path) -> set[str]:
 
 def main() -> int:
     errors: list[str] = []
-    expected_env_example_keys: set[str] = set()
-    allowed_extra_keys: set[str] = set()
-
-    # Ensure ksrpc.conf.py resolves local package when it introspects upstream defaults.
-    sys.path.insert(0, str(REPO_ROOT))
 
     try:
         upstream_module = _load_module(UPSTREAM_CONFIG_PATH, "_ksrpc_upstream_config_server")
@@ -115,61 +120,22 @@ def main() -> int:
     upstream_keys = _public_uppercase_keys(upstream_module)
     local_keys = _public_uppercase_keys(local_module)
 
-    extra_rules = getattr(local_module, "_EXTRA_ENV_RULES", {})
-    if isinstance(extra_rules, dict):
-        extra_rule_keys = {k for k in extra_rules if isinstance(k, str)}
-        expected_env_example_keys = set(extra_rule_keys)
-        allowed_extra_keys = set(extra_rule_keys)
-    else:
-        errors.append(
-            _format_diff(
-                "extra_env_rules",
-                "ksrpc.conf.py._EXTRA_ENV_RULES",
-                [],
-                ["_EXTRA_ENV_RULES_not_dict"],
-            )
-        )
-
     config_missing = sorted(upstream_keys - local_keys)
-    config_extra = sorted((local_keys - upstream_keys) - allowed_extra_keys)
+    config_extra = sorted(local_keys - upstream_keys)
     if config_missing or config_extra:
         errors.append(
             _format_diff(
                 "config_keys",
-                "ksrpc/config_server.py_vs_ksrpc.conf.py",
+                "ksrpc/config_server.py_vs_config_server.example.py",
                 config_missing,
                 config_extra,
             )
         )
 
-    fallback_defaults = getattr(local_module, "_FALLBACK_DEFAULTS", None)
-    if not isinstance(fallback_defaults, dict):
-        errors.append(
-            _format_diff(
-                "fallback_defaults",
-                "ksrpc.conf.py._FALLBACK_DEFAULTS",
-                sorted(upstream_keys),
-                ["_FALLBACK_DEFAULTS_not_dict"],
-            )
-        )
-    else:
-        fallback_keys = {k for k in fallback_defaults if isinstance(k, str)}
-        fallback_missing = sorted(upstream_keys - fallback_keys)
-        fallback_extra = sorted(fallback_keys - upstream_keys)
-        if fallback_missing or fallback_extra:
-            errors.append(
-                _format_diff(
-                    "fallback_defaults",
-                    "ksrpc.conf.py._FALLBACK_DEFAULTS",
-                    fallback_missing,
-                    fallback_extra,
-                )
-            )
-
     if not ENV_EXAMPLE_PATH.exists():
         errors.append(
             _format_diff(
-                "deprecated_alias_keys",
+                "env_example_keys",
                 _display_path(ENV_EXAMPLE_PATH),
                 ["missing_file"],
                 [],
@@ -177,14 +143,14 @@ def main() -> int:
         )
     else:
         env_example_keys = _read_env_keys(ENV_EXAMPLE_PATH)
-        env_example_aliases = sorted(env_example_keys & DEPRECATED_SERVICE_ALIAS_KEYS)
-        if env_example_aliases:
+        env_example_missing = sorted(REQUIRED_ENV_EXAMPLE_KEYS - env_example_keys)
+        if env_example_missing:
             errors.append(
                 _format_diff(
-                    "deprecated_alias_keys",
+                    "required_env_example_keys",
                     _display_path(ENV_EXAMPLE_PATH),
+                    env_example_missing,
                     [],
-                    env_example_aliases,
                 )
             )
         env_example_disallowed = sorted(env_example_keys & DISALLOWED_ENV_EXAMPLE_KEYS)
@@ -195,16 +161,6 @@ def main() -> int:
                     _display_path(ENV_EXAMPLE_PATH),
                     [],
                     env_example_disallowed,
-                )
-            )
-        env_example_missing = sorted(expected_env_example_keys - env_example_keys)
-        if env_example_missing:
-            errors.append(
-                _format_diff(
-                    "extra_env_rule_keys_not_in_env_example",
-                    _display_path(ENV_EXAMPLE_PATH),
-                    env_example_missing,
-                    [],
                 )
             )
 

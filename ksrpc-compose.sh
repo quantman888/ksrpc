@@ -67,6 +67,13 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+PRIVATE_CONFIG_PATH="${APP_DIR}/config_server.py"
+if [[ ! -f "${PRIVATE_CONFIG_PATH}" ]]; then
+  echo "private config not found: ${PRIVATE_CONFIG_PATH}"
+  echo "Copy ./config_server.example.py to ./config_server.py and edit it locally before deploy."
+  exit 1
+fi
+
 mkdir -p "$(dirname "${COMPOSE_FILE}")"
 
 read_env_from_file() {
@@ -210,13 +217,10 @@ EOF
       - ${ENV_FILE}
     environment:
       TZ: Asia/Shanghai
-      CONFIG_SERVER: /etc/ksrpc/ksrpc.conf.py
-      KSRPC_GUNICORN_BIND: 0.0.0.0:8080
-      PORT: "8080"
-      CACHE_PATH: /opt/ksrpc/cache
+      CONFIG_SERVER: /etc/ksrpc/config_server.py
     volumes:
-      - "\${KSRPC_GUNICORN_CONFIG_PATH:-./gunicorn.conf.py}:/etc/ksrpc/gunicorn.conf.py:ro"
-      - "\${KSRPC_CONFIG_PATH:-./ksrpc.conf.py}:/etc/ksrpc/ksrpc.conf.py:ro"
+      - "./gunicorn.conf.py:/etc/ksrpc/gunicorn.conf.py:ro"
+      - "./config_server.py:/etc/ksrpc/config_server.py:ro"
       - "${cache_host_path}:/opt/ksrpc/cache"
     ports:
       - "${host_port}:8080"

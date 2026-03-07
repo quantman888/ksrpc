@@ -39,6 +39,17 @@ pip install ksrpc -i https://mirrors.aliyun.com/pypi/simple --upgrade
 pip install ksrpc -i https://pypi.org/simple --upgrade
 ```
 
+## Docker 配置
+
+- 仓库提交 `config_server.example.py` 作为模板，部署机本地维护私有 `config_server.py`
+- 首次部署前执行 `cp config_server.example.py config_server.py`，然后只在本地修改 `config_server.py`
+- 本地 `config_server.py` 已加入 `.gitignore` 和 `.dockerignore`，不会提交到仓库，也不会进入镜像构建上下文
+- gunicorn 进程参数集中维护在仓库根目录 `gunicorn.conf.py`
+- `.env` 只保留镜像、端口、实例数和 `tushare` 这类环境变量
+- `docker-compose.yml` 会把 `config_server.py` 挂载到容器 `/etc/ksrpc/config_server.py`，并通过 `CONFIG_SERVER` 加载
+- GitHub Actions 只校验 `config_server.example.py`，不会读取你的本地私有 `config_server.py`
+- `tushare` 相关密钥继续走环境变量 `TUSHARE_TOKEN`、`TUSHARE_TIMEOUT`
+
 ## 使用
 
 1. 服务端
@@ -172,8 +183,9 @@ print(await demo1.__getattr__('__doc__')())  # 取的远程ksrpc.server.demo.__d
 
 ## 环境变量和配置
 
-1. 服务端`ksrpc/config_server.py`
-    - `CONFIG_SERVER` 通过环境变量指定配置文件路径。例如`CONFIG_SERVER=config_server.py`
+1. 服务端配置模板 `config_server.example.py`
+    - 部署前复制为本地私有文件：`cp config_server.example.py config_server.py`
+    - `CONFIG_SERVER` 通过环境变量指定本地配置文件路径。例如`CONFIG_SERVER=config_server.py`
 
 2. 客户端`ksrpc/config_client.py`
     - `CONFIG_CLIENT` 通过环境变量指定配置文件路径。例如`CONFIG_CLIENT=config_client.py`
