@@ -1,10 +1,10 @@
-name: Docker Publish
+name: Artifact Publish
 
 on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
+  group: artifact-publish-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   guard_branch:
-    name: Docker Publish / Branch Guard
+    name: Artifact Publish / Branch Guard
     runs-on: ubuntu-latest
     steps:
       - name: Require docker branch for manual publish
@@ -25,7 +25,7 @@ jobs:
           fi
 
   publish_pr:
-    name: Docker Publish / PR Dry Run
+    name: Artifact Publish / PR Dry Run
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -52,7 +52,7 @@ jobs:
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
   publish_edge:
-    name: Docker Publish / Edge
+    name: Artifact Publish / Edge
     needs: [guard_branch]
     if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/docker') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
           nexus_password: ${{ secrets.NEXUS_PASSWORD }}
 
   publish_summary:
-    name: Docker Publish / Summary
+    name: Artifact Publish / Summary
     if: ${{ always() && !cancelled() }}
     needs: [publish_pr, publish_edge]
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ jobs:
       - name: Show reusable workflow outputs
         run: |
           {
-            echo "### Docker Publish Summary"
+            echo "### Artifact Publish Summary"
             echo ""
             echo "- OCI_IMAGE_WITH_DIGEST: \`${{ steps.summary.outputs.OCI_IMAGE_WITH_DIGEST }}\`"
             echo "- OCI_IMAGE_REF: \`${{ steps.summary.outputs.OCI_IMAGE_REF }}\`"
