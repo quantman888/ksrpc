@@ -97,7 +97,7 @@ jobs:
     name: Artifact Publish / OCI
     if: ${{ inputs.publish_oci_image }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@2c67792d3767c58f1f05c794694135c79308c804
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@f46fea85c561dfd032be53c02bbe1b16bb93ee53
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -118,7 +118,7 @@ jobs:
     name: Artifact Publish / Python Package
     if: ${{ inputs.publish_python_package && vars.ENABLE_PYTHON_PACKAGE_PUBLISH == 'true' }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@2c67792d3767c58f1f05c794694135c79308c804
+    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@f46fea85c561dfd032be53c02bbe1b16bb93ee53
     with:
       PYTHON_PACKAGE_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL }}
       PYTHON_PACKAGE_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL || '' }}
