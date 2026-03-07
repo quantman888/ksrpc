@@ -47,6 +47,7 @@ pip install ksrpc -i https://pypi.org/simple --upgrade
 - gunicorn 进程参数集中维护在仓库根目录 `gunicorn.conf.py`
 - `.env` 只保留镜像、端口、实例数和 `tushare` 这类环境变量
 - `docker-compose.yml` 会把 `config_server.py` 挂载到容器 `/etc/ksrpc/config_server.py`，并通过 `CONFIG_SERVER` 加载
+- `docker` 分支发布的 OCI 镜像直接基于当前仓库源码构建，不再安装外部已发布的 `ksrpc` 包
 - GitHub Actions 只校验 `config_server.example.py`，不会读取你的本地私有 `config_server.py`
 - `tushare` 相关密钥继续走环境变量 `TUSHARE_TOKEN`、`TUSHARE_TIMEOUT`
 

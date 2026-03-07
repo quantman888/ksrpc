@@ -30,6 +30,9 @@ htmlcov/
 .env
 .env.*
 config_server.py
+.artifacts/
+data/
+docker-compose.multi.yml
 
 .idea/
 .vscode/
