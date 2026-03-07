@@ -53,7 +53,7 @@ jobs:
   docker_publish:
     name: Docker Publish / Reusable
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@edbf24560d25b0bc79c83dcc60af0af9d0bf1e45
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@59f253fb8a4cb9a3e7c1cd9bd34c4d4440faf7f6
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -66,6 +66,10 @@ jobs:
       OCI_RELEASE_VERSION: ${{ github.ref_name == 'docker-stable' && inputs.release_version || '' }}
       OCI_PUBLISH_LATEST: ${{ github.ref_name == 'docker-stable' }}
       OCI_GATE_VULN_IGNORE_UNFIXED: true
+      PYTHON_PACKAGE_NAME: ksrpc
+      PYTHON_PACKAGE_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL || '' }}
+      PYTHON_PACKAGE_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL || '' }}
+      PYTHON_PACKAGE_TRUSTED_HOST: ${{ vars.NEXUS_PYPI_TRUSTED_HOST || '' }}
     secrets:
       nexus_username: ${{ secrets.NEXUS_USERNAME }}
       nexus_password: ${{ secrets.NEXUS_PASSWORD }}
