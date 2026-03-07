@@ -97,7 +97,7 @@ jobs:
     name: Artifact Publish / OCI
     if: ${{ inputs.publish_oci_image }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@bfa13a4a4b6ac85e9d573bc765dd67183e90c34c
+    uses: quantman888/workflow-reusable/.github/workflows/docker-publish.reusable.yml@c2ed4c2bb2163567d5b62b6d7d2e9b61295c96e8
     with:
       OCI_REGISTRY: ${{ vars.NEXUS_REGISTRY }}
       OCI_IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -113,12 +113,10 @@ jobs:
       OCI_GATE_RUN_ARGS: >-
         -p 18080:8080
         -e TZ=Asia/Shanghai
-        -e CONFIG_SERVER=/etc/ksrpc/config_server.py
-        -v '__GITHUB_WORKSPACE__/gunicorn.conf.py:/etc/ksrpc/gunicorn.conf.py:ro'
-        -v '__GITHUB_WORKSPACE__/config_server.example.py:/etc/ksrpc/config_server.py:ro'
+        -e CONFIG_SERVER=/app/config_server.py
+        -v '__GITHUB_WORKSPACE__/gunicorn.conf.py:/app/gunicorn.conf.py:ro'
+        -v '__GITHUB_WORKSPACE__/config_server.example.py:/app/config_server.py:ro'
         -v '__GITHUB_WORKSPACE__/.artifacts/oci-gate-cache:/opt/ksrpc/cache'
-      OCI_GATE_COMMAND: >-
-        python -u -m gunicorn -c /etc/ksrpc/gunicorn.conf.py ksrpc.run_gunicorn:web_app
       OCI_GATE_SMOKE_CMD: |
         python -X utf8 <<'PY'
         import asyncio
@@ -166,7 +164,7 @@ jobs:
     name: Artifact Publish / Python Package
     if: ${{ inputs.publish_python_package && vars.ENABLE_PYTHON_PACKAGE_PUBLISH == 'true' }}
     needs: [guard_branch]
-    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@bfa13a4a4b6ac85e9d573bc765dd67183e90c34c
+    uses: quantman888/workflow-reusable/.github/workflows/python-package-publish.reusable.yml@c2ed4c2bb2163567d5b62b6d7d2e9b61295c96e8
     with:
       PYTHON_PACKAGE_REPOSITORY_URL: ${{ vars.NEXUS_PYPI_REPOSITORY_URL }}
       PYTHON_PACKAGE_SIMPLE_URL: ${{ vars.NEXUS_PYPI_SIMPLE_URL || '' }}
