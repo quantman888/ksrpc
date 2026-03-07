@@ -10,19 +10,26 @@ from contextlib import redirect_stdout
 # 需维护区（仅以下内容需要人工关注）
 # ---------------------------------------------------------------------
 # 兜底默认项：仅在上游 config_server.py 无法加载时使用。
+_FALLBACK_IMPORT_RULES = {
+    "ksrpc.server.tushare": True,
+    "ksrpc.server.demo": False,
+    "tushare": False,
+    "ksrpc.server.*": False,
+    "builtins": False,
+    "*": False,
+}
+
 _FALLBACK_DEFAULTS = {
     "PORT": 8080,
     "HOST": None,
     "PATH": "/api/v1",
     "USER_CREDENTIALS": {"admin": "change_me_now"},
     "TIMESTAMP_CHECK": 30,
-    "IMPORT_RULES": {
-        "ksrpc.server.tushare": True,
-        "ksrpc.server.demo": False,
-        "tushare": False,
-        "ksrpc.server.*": False,
-        "builtins": False,
-        "*": False,
+    "IMPORT_RULES": dict(_FALLBACK_IMPORT_RULES),
+    "USER_RULES": {
+        "用户名": dict(_FALLBACK_IMPORT_RULES),
+        "admin": dict(_FALLBACK_IMPORT_RULES),
+        "user": dict(_FALLBACK_IMPORT_RULES),
     },
     "CACHE_ENABLE": False,
     "CACHE_PATH": "/opt/ksrpc/cache",
