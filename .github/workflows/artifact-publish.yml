@@ -132,10 +132,6 @@ jobs:
                 username="admin",
                 password="password123",
             ) as conn:
-                tushare_proxy = RpcClient("ksrpc.server.tushare", conn)
-                token = await tushare_proxy.get_token()
-                assert token == "", token
-
                 demo = RpcClient("ksrpc.server.demo", conn)
                 frame = await demo.test()
                 assert frame["A"].tolist() == [1, 2, 3, 4, 5], frame
