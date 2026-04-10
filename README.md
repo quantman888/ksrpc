@@ -153,7 +153,7 @@ await 一个模块.零到多个模块或方法或属性.一个方法或属性(�
 
 1. `from ksrpc.client import Self`，然后传入`Self`参数
 2. `builtins`中已经定义了`func`函数
-3. `config_server.py`中`IMPORT_RULES`已经设置了`"builtins": True`，或没有设置`builtins`, 但设置了`"*": True`
+3. `config_server.py`中的导入规则已经设置了`"builtins": True`，或没有设置`builtins`, 但设置了`"*": True`
 
 前面两句可以简化成
 
