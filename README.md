@@ -70,7 +70,9 @@ DEPLOY_GIT_REMOTE=origin DEPLOY_GIT_REF=docker bash ./scripts/deploy_from_git.sh
 
 1. 脚本只从 git 更新受版本控制的代码，不会覆盖本地私有 `.env` 与 `config_server.py`
 2. `DEPLOY_PULL_ONLY=1 bash ./scripts/deploy_from_git.sh` 只刷新代码，不启动容器
-3. 当前脚本面向 `KSRPC_INSTANCES=1` 的单实例 docker-compose 部署
+3. 默认按 `.env` 中 `OCI_IMAGE_REF` 直接 `docker pull` + `docker compose up`
+4. 如需部署机本地源码构建，可显式运行 `DEPLOY_BUILD_LOCAL=1 bash ./scripts/deploy_from_git.sh`
+5. 当前脚本面向 `KSRPC_INSTANCES=1` 的单实例 docker-compose 部署
 
 ## 使用
 

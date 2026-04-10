@@ -57,6 +57,15 @@ def _build_payload(api_name: str, params: dict[str, Any], fields: str) -> dict[s
     }
 
 
+def _upstream_error_payload(result: dict[str, Any]) -> dict[str, Any]:
+    try:
+        code = int(result.get("code", -1))
+    except (TypeError, ValueError):
+        code = -1
+    message = str(result.get("msg") or "upstream business error")
+    return {"code": code, "msg": message}
+
+
 def query(
     *,
     client_token: str,
@@ -93,7 +102,11 @@ def query(
         raise RuntimeError("invalid upstream response shape")
 
     if int(result.get("code", -1)) != 0:
-        raise RuntimeError(str(result.get("msg") or "upstream business error"))
+        return {
+            "upstream_error": _upstream_error_payload(result),
+            "upstream_bytes": upstream_bytes,
+            "quota_bytes_used_after": quota_bytes_used_after,
+        }
 
     data = result.get("data")
     if not isinstance(data, dict):

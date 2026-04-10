@@ -9,6 +9,7 @@ GIT_REF="${DEPLOY_GIT_REF:-${CURRENT_BRANCH}}"
 ENV_FILE="${DEPLOY_ENV_FILE:-${APP_DIR}/.env}"
 CONFIG_FILE="${DEPLOY_CONFIG_FILE:-${APP_DIR}/config_server.py}"
 BUILD_IMAGE="${DEPLOY_BUILD_IMAGE:-ksrpc:git-deploy}"
+BUILD_LOCAL="${DEPLOY_BUILD_LOCAL:-0}"
 PULL_ONLY="${DEPLOY_PULL_ONLY:-0}"
 
 log() {
@@ -91,11 +92,26 @@ if [[ "${INSTANCES}" != "1" ]]; then
   die "KSRPC_INSTANCES=${INSTANCES} is not supported by scripts/deploy_from_git.sh yet"
 fi
 
+OCI_IMAGE_REF="$(read_env_from_file OCI_IMAGE_REF "${ENV_FILE}" "")"
+if [[ "${BUILD_LOCAL}" != "1" && -z "${OCI_IMAGE_REF}" ]]; then
+  die "OCI_IMAGE_REF is required unless DEPLOY_BUILD_LOCAL=1"
+fi
+
 (
   cd "${APP_DIR}"
-  docker build -t "${BUILD_IMAGE}" .
-  OCI_IMAGE_REF="${BUILD_IMAGE}" docker compose --env-file "${ENV_FILE}" config >/dev/null
-  OCI_IMAGE_REF="${BUILD_IMAGE}" docker compose --env-file "${ENV_FILE}" up -d --remove-orphans --force-recreate
+  if [[ "${BUILD_LOCAL}" == "1" ]]; then
+    docker build -t "${BUILD_IMAGE}" .
+    OCI_IMAGE_REF="${BUILD_IMAGE}" docker compose --env-file "${ENV_FILE}" config >/dev/null
+    OCI_IMAGE_REF="${BUILD_IMAGE}" docker compose --env-file "${ENV_FILE}" up -d --remove-orphans --force-recreate
+  else
+    docker compose --env-file "${ENV_FILE}" config >/dev/null
+    docker compose --env-file "${ENV_FILE}" pull
+    docker compose --env-file "${ENV_FILE}" up -d --remove-orphans --force-recreate
+  fi
 )
 
-log "deployed ref $(git -C "${APP_DIR}" rev-parse --short HEAD) with image ${BUILD_IMAGE}"
+if [[ "${BUILD_LOCAL}" == "1" ]]; then
+  log "deployed ref $(git -C "${APP_DIR}" rev-parse --short HEAD) with image ${BUILD_IMAGE}"
+else
+  log "deployed ref $(git -C "${APP_DIR}" rev-parse --short HEAD) with pulled image ${OCI_IMAGE_REF}"
+fi
