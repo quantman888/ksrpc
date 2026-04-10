@@ -51,6 +51,27 @@ pip install ksrpc -i https://pypi.org/simple --upgrade
 - GitHub Actions 只校验 `config_server.example.py`，不会读取你的本地私有 `config_server.py`
 - `tushare` 相关密钥继续走环境变量 `TUSHARE_TOKEN`、`TUSHARE_TIMEOUT`
 
+### Git Pull 部署
+
+首次部署时：
+
+```bash
+bash ./scripts/bootstrap_runtime_files.sh
+# 然后只在部署机本地修改 .env 和 config_server.py
+```
+
+后续更新代码并重启容器：
+
+```bash
+DEPLOY_GIT_REMOTE=origin DEPLOY_GIT_REF=docker bash ./scripts/deploy_from_git.sh
+```
+
+说明：
+
+1. 脚本只从 git 更新受版本控制的代码，不会覆盖本地私有 `.env` 与 `config_server.py`
+2. `DEPLOY_PULL_ONLY=1 bash ./scripts/deploy_from_git.sh` 只刷新代码，不启动容器
+3. 当前脚本面向 `KSRPC_INSTANCES=1` 的单实例 docker-compose 部署
+
 ## 使用
 
 1. 服务端

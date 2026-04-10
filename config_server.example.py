@@ -37,6 +37,7 @@ ksrpc* # 当前模块和子模块
 _IMPORT_RULES = {
     "ksrpc.server.demo": True,
     "ksrpc.server.tushare": True,  # 代理，解决登录问题
+    "ksrpc.server.tushare_gateway": True,  # 供网关内部调用的真实上游计量入口
     "tushare": False,  # 禁止直接调用
     "ksrpc.server.*": False,
 

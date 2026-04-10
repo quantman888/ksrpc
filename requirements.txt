@@ -1,6 +1,7 @@
 pandas<3.0
 tushare
 aiohttp
+redis>=5.0.0
 loguru
 psutil
 dill>=0.3.4
